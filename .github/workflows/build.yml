@@ -8,10 +8,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.22.2'
+
+      - name: Check Flutter & Java versions
+        run: |
+          flutter --version
+          java -version
 
       - name: Create Android project
         run: |
@@ -21,8 +32,8 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Build APK
-        run: flutter build apk --release
+      - name: Build APK (verbose)
+        run: flutter build apk --release --verbose
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
