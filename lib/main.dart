@@ -4,6 +4,7 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:convert';
+import 'services/payment_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,8 +52,6 @@ class MyApp extends StatelessWidget {
         GetPage(name: '/register', page: () => const RegisterScreen()),
         GetPage(name: '/home', page: () => const HomeScreen()),
         GetPage(name: '/packages', page: () => const PackagesScreen()),
-        // Remove the named route for payment since it requires a package parameter
-        // GetPage(name: '/payment', page: () => const PaymentScreen()), // REMOVED
         GetPage(name: '/voucher', page: () => const VoucherScreen()),
         GetPage(name: '/account', page: () => const AccountScreen()),
         GetPage(name: '/admin', page: () => const AdminDashboard()),
@@ -66,9 +65,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// ============================================================
-// SPLASH SCREEN
-// ============================================================
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -134,9 +130,6 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 }
 
-// ============================================================
-// DATABASE SERVICE
-// ============================================================
 class DB {
   static final DB _instance = DB._internal();
   factory DB() => _instance;
@@ -306,9 +299,6 @@ class DB {
   }
 }
 
-// ============================================================
-// LOGIN SCREEN
-// ============================================================
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -422,9 +412,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// ============================================================
-// REGISTER SCREEN
-// ============================================================
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -510,9 +497,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 }
 
-// ============================================================
-// HOME SCREEN
-// ============================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -604,9 +588,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// ============================================================
-// PACKAGES SCREEN
-// ============================================================
 class PackagesScreen extends StatefulWidget {
   const PackagesScreen({super.key});
 
@@ -665,7 +646,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
 }
 
 // ============================================================
-// PAYMENT SCREEN
+// PAYMENT SCREEN - REAL GOSENTEPAY INTEGRATION
 // ============================================================
 class PaymentScreen extends StatefulWidget {
   final Map<String, dynamic> package;
@@ -678,6 +659,10 @@ class PaymentScreen extends StatefulWidget {
 class _PaymentScreenState extends State<PaymentScreen> {
   final phone = TextEditingController();
   bool loading = false;
+  bool paymentInitiated = false;
+  String paymentRef = '';
+  String statusMessage = '';
+  Color statusColor = Colors.white;
   final db = DB();
 
   @override
@@ -696,7 +681,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
       Get.snackbar('Error', 'Valid phone required', backgroundColor: Colors.red, colorText: Colors.white);
       return;
     }
-    setState(() => loading = true);
+    setState(() {
+      loading = true;
+      statusMessage = 'Initiating payment...';
+      statusColor = Colors.cyan;
+    });
+
     final user = await db.getCurrentUser();
     if (user == null) {
       Get.snackbar('Error', 'Login required', backgroundColor: Colors.red, colorText: Colors.white);
@@ -704,69 +694,191 @@ class _PaymentScreenState extends State<PaymentScreen> {
       return;
     }
 
-    await Future.delayed(const Duration(seconds: 2));
-    final ref = 'SPX${DateTime.now().millisecondsSinceEpoch}';
-    
-    final sub = {
-      'id': const Uuid().v4(),
-      'userId': user['id'],
-      'packageId': widget.package['id'],
-      'startDate': DateTime.now().toIso8601String(),
-      'expiryDate': DateTime.now().add(Duration(days: widget.package['durationDays'] ?? 1)).toIso8601String(),
-      'status': 'active',
-      'createdAt': DateTime.now().toIso8601String(),
-    };
-    await db.addSubscription(sub);
-    await db.addPayment({
-      'id': const Uuid().v4(),
-      'userId': user['id'],
-      'subscriptionId': sub['id'],
-      'amount': widget.package['price'],
-      'method': 'gosentepay',
-      'status': 'success',
-      'reference': ref,
-      'createdAt': DateTime.now().toIso8601String(),
-    });
+    // Call GosentePay
+    final result = await GosentePayService.initiatePayment(
+      phone: phone.text.trim(),
+      amount: widget.package['price'].toDouble(),
+      userId: user['id'],
+      packageId: widget.package['id'],
+      packageName: widget.package['name'],
+    );
 
-    setState(() => loading = false);
-    Get.snackbar('Success', 'Payment confirmed! 🎉', backgroundColor: Colors.green, colorText: Colors.white);
-    Future.delayed(const Duration(seconds: 2), () => Get.offAllNamed('/home'));
+    if (result['success']) {
+      setState(() {
+        paymentInitiated = true;
+        paymentRef = result['reference'];
+        statusMessage = 'Payment initiated! Check your phone.';
+        statusColor = Colors.green;
+        loading = false;
+      });
+      _pollPaymentStatus(paymentRef);
+    } else {
+      setState(() {
+        loading = false;
+        statusMessage = result['message'] ?? 'Payment failed.';
+        statusColor = Colors.red;
+      });
+    }
+  }
+
+  Future<void> _pollPaymentStatus(String ref) async {
+    await Future.delayed(const Duration(seconds: 5));
+    for (int i = 0; i < 10; i++) {
+      final statusResult = await GosentePayService.verifyPayment(ref);
+      if (statusResult['success']) {
+        final status = statusResult['status'];
+        if (status == 'success' || status == 'completed') {
+          final user = await db.getCurrentUser();
+          if (user != null) {
+            final sub = {
+              'id': const Uuid().v4(),
+              'userId': user['id'],
+              'packageId': widget.package['id'],
+              'startDate': DateTime.now().toIso8601String(),
+              'expiryDate': DateTime.now()
+                  .add(Duration(days: widget.package['durationDays'] ?? 1))
+                  .toIso8601String(),
+              'status': 'active',
+              'createdAt': DateTime.now().toIso8601String(),
+            };
+            await db.addSubscription(sub);
+            await db.addPayment({
+              'id': const Uuid().v4(),
+              'userId': user['id'],
+              'subscriptionId': sub['id'],
+              'amount': widget.package['price'],
+              'currency': widget.package['currency'] ?? 'UGX',
+              'method': 'gosentepay',
+              'status': 'success',
+              'reference': ref,
+              'createdAt': DateTime.now().toIso8601String(),
+            });
+          }
+          setState(() {
+            statusMessage = 'Payment confirmed! 🎉 Your subscription is active.';
+            statusColor = Colors.green;
+            loading = false;
+          });
+          Get.snackbar('Success', 'Payment confirmed! You now have internet access.',
+              backgroundColor: Colors.green, colorText: Colors.white, duration: const Duration(seconds: 5));
+          Future.delayed(const Duration(seconds: 2), () => Get.offAllNamed('/home'));
+          return;
+        } else if (status == 'failed' || status == 'cancelled') {
+          setState(() {
+            statusMessage = 'Payment failed or cancelled. Try again.';
+            statusColor = Colors.red;
+            loading = false;
+          });
+          return;
+        }
+      }
+      await Future.delayed(const Duration(seconds: 3));
+    }
+    setState(() {
+      statusMessage = 'Payment still processing. Check your phone to complete.';
+      statusColor = Colors.orange;
+      loading = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E27),
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, title: const Text('GosentePay')),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text('GosentePay'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Get.back(),
+        ),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           children: [
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: const Color(0xFF1A1F3A), borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1A1F3A),
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: Column(children: [
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('Package', style: TextStyle(color: Colors.grey[400])), Text(widget.package['name'] ?? '', style: const TextStyle(color: Colors.white))]),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [Text('Package', style: TextStyle(color: Colors.grey[400])),
+                              Text(widget.package['name'] ?? '', style: const TextStyle(color: Colors.white))]),
                 const Divider(),
-                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [const Text('Total', style: TextStyle(color: Colors.white)), Text('UGX ${widget.package['price'] ?? 0}', style: const TextStyle(color: Colors.cyan, fontSize: 20, fontWeight: FontWeight.bold))]),
+                Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [const Text('Total', style: TextStyle(color: Colors.white)),
+                              Text('UGX ${widget.package['price'] ?? 0}',
+                                  style: const TextStyle(color: Colors.cyan, fontSize: 20, fontWeight: FontWeight.bold))]),
               ]),
             ),
             const SizedBox(height: 24),
             TextField(
               controller: phone,
               style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(labelText: 'Phone Number', prefixText: '+256 ', prefixStyle: TextStyle(color: Colors.white)),
-              keyboardType: TextInputType.phone,
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: loading ? null : processPayment,
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2ECC71)),
-                child: loading ? const CircularProgressIndicator(color: Colors.white) : const Text('Pay with GosentePay', style: TextStyle(fontSize: 16, color: Colors.white)),
+              decoration: const InputDecoration(
+                labelText: 'Phone Number',
+                prefixText: '+256 ',
+                prefixStyle: TextStyle(color: Colors.white),
               ),
+              keyboardType: TextInputType.phone,
+              enabled: !loading && !paymentInitiated,
+            ),
+            const SizedBox(height: 16),
+            if (statusMessage.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: statusColor.withOpacity(0.3)),
+                ),
+                child: Row(children: [
+                  Icon(
+                    statusColor == Colors.green ? Icons.check_circle :
+                    statusColor == Colors.red ? Icons.error : Icons.hourglass_empty,
+                    color: statusColor,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(statusMessage, style: TextStyle(color: statusColor))),
+                ]),
+              ),
+            const Spacer(),
+            if (!paymentInitiated)
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: loading ? null : processPayment,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2ECC71),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: loading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text('Pay with GosentePay', style: TextStyle(fontSize: 16, color: Colors.white)),
+                ),
+              ),
+            if (paymentInitiated)
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: () => _pollPaymentStatus(paymentRef),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.cyan,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Check Payment Status', style: TextStyle(color: Colors.white)),
+                ),
+              ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => Get.offAllNamed('/home'),
+              child: const Text('Go to Home', style: TextStyle(color: Colors.cyan)),
             ),
           ],
         ),
@@ -775,9 +887,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 }
 
-// ============================================================
-// VOUCHER SCREEN
-// ============================================================
 class VoucherScreen extends StatefulWidget {
   const VoucherScreen({super.key});
 
@@ -862,9 +971,6 @@ class _VoucherScreenState extends State<VoucherScreen> {
   }
 }
 
-// ============================================================
-// ACCOUNT SCREEN
-// ============================================================
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
 
@@ -934,9 +1040,6 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 }
 
-// ============================================================
-// ADMIN DASHBOARD
-// ============================================================
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
 
@@ -1040,9 +1143,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 }
 
-// ============================================================
-// ADMIN USERS SCREEN
-// ============================================================
 class AdminUsersScreen extends StatefulWidget {
   const AdminUsersScreen({super.key});
 
@@ -1103,9 +1203,6 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 }
 
-// ============================================================
-// ADMIN PACKAGES SCREEN
-// ============================================================
 class AdminPackagesScreen extends StatefulWidget {
   const AdminPackagesScreen({super.key});
 
@@ -1191,9 +1288,6 @@ class _AdminPackagesScreenState extends State<AdminPackagesScreen> {
   }
 }
 
-// ============================================================
-// ADMIN PAYMENTS SCREEN
-// ============================================================
 class AdminPaymentsScreen extends StatefulWidget {
   const AdminPaymentsScreen({super.key});
 
@@ -1247,9 +1341,6 @@ class _AdminPaymentsScreenState extends State<AdminPaymentsScreen> {
   }
 }
 
-// ============================================================
-// ADMIN VOUCHERS SCREEN (FIXED TYPE ERROR)
-// ============================================================
 class AdminVouchersScreen extends StatefulWidget {
   const AdminVouchersScreen({super.key});
 
@@ -1292,7 +1383,6 @@ class _AdminVouchersScreenState extends State<AdminVouchersScreen> {
             onPressed: () async {
               final c = int.tryParse(count.text) ?? 5;
               final d = int.tryParse(days.text) ?? 1;
-              // FIX: Explicitly type the list
               final List<Map<String, dynamic>> newVouchers = [];
               for (int i = 0; i < c; i++) {
                 newVouchers.add({
@@ -1304,7 +1394,7 @@ class _AdminVouchersScreenState extends State<AdminVouchersScreen> {
                 });
               }
               final all = await db.getVouchers();
-              all.addAll(newVouchers); // now type matches
+              all.addAll(newVouchers);
               await db.saveVouchers(all);
               Get.back();
               load();
