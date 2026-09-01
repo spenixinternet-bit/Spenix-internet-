@@ -51,7 +51,8 @@ class MyApp extends StatelessWidget {
         GetPage(name: '/register', page: () => const RegisterScreen()),
         GetPage(name: '/home', page: () => const HomeScreen()),
         GetPage(name: '/packages', page: () => const PackagesScreen()),
-        GetPage(name: '/payment', page: () => const PaymentScreen()),
+        // Remove the named route for payment since it requires a package parameter
+        // GetPage(name: '/payment', page: () => const PaymentScreen()), // REMOVED
         GetPage(name: '/voucher', page: () => const VoucherScreen()),
         GetPage(name: '/account', page: () => const AccountScreen()),
         GetPage(name: '/admin', page: () => const AdminDashboard()),
@@ -65,6 +66,9 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// ============================================================
+// SPLASH SCREEN
+// ============================================================
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -130,6 +134,9 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 }
 
+// ============================================================
+// DATABASE SERVICE
+// ============================================================
 class DB {
   static final DB _instance = DB._internal();
   factory DB() => _instance;
@@ -299,6 +306,9 @@ class DB {
   }
 }
 
+// ============================================================
+// LOGIN SCREEN
+// ============================================================
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -412,6 +422,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
+// ============================================================
+// REGISTER SCREEN
+// ============================================================
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -497,6 +510,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 }
 
+// ============================================================
+// HOME SCREEN
+// ============================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -588,6 +604,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+// ============================================================
+// PACKAGES SCREEN
+// ============================================================
 class PackagesScreen extends StatefulWidget {
   const PackagesScreen({super.key});
 
@@ -645,6 +664,9 @@ class _PackagesScreenState extends State<PackagesScreen> {
   }
 }
 
+// ============================================================
+// PAYMENT SCREEN
+// ============================================================
 class PaymentScreen extends StatefulWidget {
   final Map<String, dynamic> package;
   const PaymentScreen({super.key, required this.package});
@@ -753,6 +775,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 }
 
+// ============================================================
+// VOUCHER SCREEN
+// ============================================================
 class VoucherScreen extends StatefulWidget {
   const VoucherScreen({super.key});
 
@@ -837,6 +862,9 @@ class _VoucherScreenState extends State<VoucherScreen> {
   }
 }
 
+// ============================================================
+// ACCOUNT SCREEN
+// ============================================================
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
 
@@ -906,6 +934,9 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 }
 
+// ============================================================
+// ADMIN DASHBOARD
+// ============================================================
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
 
@@ -1009,6 +1040,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 }
 
+// ============================================================
+// ADMIN USERS SCREEN
+// ============================================================
 class AdminUsersScreen extends StatefulWidget {
   const AdminUsersScreen({super.key});
 
@@ -1069,6 +1103,9 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 }
 
+// ============================================================
+// ADMIN PACKAGES SCREEN
+// ============================================================
 class AdminPackagesScreen extends StatefulWidget {
   const AdminPackagesScreen({super.key});
 
@@ -1154,6 +1191,9 @@ class _AdminPackagesScreenState extends State<AdminPackagesScreen> {
   }
 }
 
+// ============================================================
+// ADMIN PAYMENTS SCREEN
+// ============================================================
 class AdminPaymentsScreen extends StatefulWidget {
   const AdminPaymentsScreen({super.key});
 
@@ -1207,6 +1247,9 @@ class _AdminPaymentsScreenState extends State<AdminPaymentsScreen> {
   }
 }
 
+// ============================================================
+// ADMIN VOUCHERS SCREEN (FIXED TYPE ERROR)
+// ============================================================
 class AdminVouchersScreen extends StatefulWidget {
   const AdminVouchersScreen({super.key});
 
@@ -1249,12 +1292,19 @@ class _AdminVouchersScreenState extends State<AdminVouchersScreen> {
             onPressed: () async {
               final c = int.tryParse(count.text) ?? 5;
               final d = int.tryParse(days.text) ?? 1;
-              final newVouchers = [];
+              // FIX: Explicitly type the list
+              final List<Map<String, dynamic>> newVouchers = [];
               for (int i = 0; i < c; i++) {
-                newVouchers.add({'id': const Uuid().v4(), 'code': 'FREE${DateTime.now().millisecondsSinceEpoch % 10000}', 'durationDays': d, 'isUsed': false, 'createdAt': DateTime.now().toIso8601String()});
+                newVouchers.add({
+                  'id': const Uuid().v4(),
+                  'code': 'FREE${DateTime.now().millisecondsSinceEpoch % 10000}',
+                  'durationDays': d,
+                  'isUsed': false,
+                  'createdAt': DateTime.now().toIso8601String()
+                });
               }
               final all = await db.getVouchers();
-              all.addAll(newVouchers);
+              all.addAll(newVouchers); // now type matches
               await db.saveVouchers(all);
               Get.back();
               load();
