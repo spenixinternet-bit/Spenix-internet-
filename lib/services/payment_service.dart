@@ -2,11 +2,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class GosentePayService {
-  // YOUR API KEYS (I already put them for you)
   static const String apiKey = '9d6c7d3c450aa51ca4c100fbe0adf5c1145c3a1e5eb665e1f4fac61a29e5c070';
   static const String apiSecret = '99F899BE-4D93F38E-2E1717C9-D07CDD5F-73C3E4CB-EB6B3187';
-  
-  // GosentePay API URL
   static const String baseUrl = 'https://api.gosentepay.com/v1';
 
   static Future<Map<String, dynamic>> initiatePayment({
