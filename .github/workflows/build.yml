@@ -19,21 +19,19 @@ jobs:
         with:
           flutter-version: '3.22.2'
 
-      - name: Check Flutter & Java versions
-        run: |
-          flutter --version
-          java -version
-
       - name: Create Android project
         run: |
           flutter create --project-name=spenix_internet --platforms=android .
-          ls -la
+          # Fix Gradle to use a newer version (avoids Kotlin issues)
+          cd android
+          sed -i 's/gradle-7.6.3/gradle-8.0.2/g' gradle/wrapper/gradle-wrapper.properties
+          cd ..
 
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Build APK (verbose)
-        run: flutter build apk --release --verbose
+      - name: Build APK
+        run: flutter build apk --release
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
