@@ -1,5 +1,4 @@
-// ✅ IMPORT THE PACKAGE
-import 'package:openvpn_flutter/openvpn_flutter.dart';
+import 'package:wireguard_flutter/wireguard_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 class VpnService {
@@ -18,53 +17,47 @@ class VpnService {
     }
 
     // ============================================================
-    // 👇 CHANGE THESE TO YOUR SETUP
+    // 👇 CHANGE THIS TO YOUR GATEWAY PUBLIC IP
     // ============================================================
-    const String gatewayIp = 'YOUR_PUBLIC_IP';   // Your public IP (e.g., 102.0.0.1)
-    const int vpnPort = 1194;
-    const String caCert = '''
------BEGIN CERTIFICATE-----
-MIID... (paste your CA certificate here)
------END CERTIFICATE-----
-''';
+    const String gatewayIp = 'YOUR_GATEWAY_IP';   // e.g., 102.0.0.1
+    const int vpnPort = 51820;                     // WireGuard default port
 
+    // Generate a client key pair (you can also use a fixed one)
+    final privateKey = await WireGuardFlutter.generatePrivateKey();
+    final publicKey = await WireGuardFlutter.generatePublicKey(privateKey);
+
+    // Build WireGuard config
     final config = '''
-client
-dev tun
-proto udp
-remote $gatewayIp $vpnPort
-resolv-retry infinite
-nobind
-persist-key
-persist-tun
-remote-cert-tls server
-cipher AES-256-CBC
-verb 3
-auth-user-pass
-<ca>
-$caCert
-</ca>
+[Interface]
+Address = 10.0.0.2/24
+PrivateKey = $privateKey
+DNS = 1.1.1.1
+
+[Peer]
+PublicKey = YOUR_SERVER_PUBLIC_KEY   # 👈 Replace with your server's public key
+Endpoint = $gatewayIp:$vpnPort
+AllowedIPs = 0.0.0.0/0
+PersistentKeepalive = 25
 ''';
 
-    // ✅ USE THE CORRECT CLASS NAME: OpenVpnFlutter (capital O, V, P, N)
-    await OpenVpnFlutter.startVpn(config);
+    // Connect using WireGuard
+    await WireGuardFlutter.startVpn(
+      config: config,
+      name: 'Spenix VPN',
+    );
     _isConnected = true;
   }
 
   static Future<void> disconnect() async {
-    await OpenVpnFlutter.stopVpn();
+    await WireGuardFlutter.stopVpn();
     _isConnected = false;
   }
 
-  // Real-time status stream
   static Stream<bool> get status async* {
-    await for (var event in OpenVpnFlutter.status) {
-      if (event == VpnStatus.connected) {
-        _isConnected = true;
-      } else if (event == VpnStatus.disconnected) {
-        _isConnected = false;
-      }
-      yield _isConnected;
+    while (true) {
+      final status = await WireGuardFlutter.getVpnStatus();
+      yield status == VpnStatus.connected;
+      await Future.delayed(const Duration(seconds: 1));
     }
   }
 }
