@@ -66,6 +66,9 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// ============================================================
+// SPLASH SCREEN
+// ============================================================
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -131,6 +134,9 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 }
 
+// ============================================================
+// DATABASE SERVICE
+// ============================================================
 class DB {
   static final DB _instance = DB._internal();
   factory DB() => _instance;
@@ -300,6 +306,9 @@ class DB {
   }
 }
 
+// ============================================================
+// LOGIN SCREEN
+// ============================================================
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -413,6 +422,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
+// ============================================================
+// REGISTER SCREEN
+// ============================================================
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -498,6 +510,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 }
 
+// ============================================================
+// HOME SCREEN
+// ============================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -510,11 +525,21 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? user;
   Map<String, dynamic>? sub;
   bool loading = true;
+  VpnStatus? _vpnStatus;
 
   @override
   void initState() {
     super.initState();
     loadData();
+    _listenToVpnStatus();
+  }
+
+  void _listenToVpnStatus() {
+    VpnService.status.listen((status) {
+      setState(() {
+        _vpnStatus = status;
+      });
+    });
   }
 
   Future<void> loadData() async {
@@ -562,6 +587,48 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: _vpnStatus == VpnStatus.connected 
+                            ? Colors.green.withOpacity(0.1) 
+                            : Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _vpnStatus == VpnStatus.connected ? Colors.green : Colors.red,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            _vpnStatus == VpnStatus.connected 
+                                ? Icons.vpn_key 
+                                : Icons.vpn_key_off,
+                            color: _vpnStatus == VpnStatus.connected ? Colors.green : Colors.red,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            _vpnStatus == VpnStatus.connected 
+                                ? '🟢 VPN Connected' 
+                                : '🔴 VPN Disconnected',
+                            style: TextStyle(
+                              color: _vpnStatus == VpnStatus.connected ? Colors.green : Colors.red,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (_vpnStatus == VpnStatus.connected)
+                            TextButton(
+                              onPressed: () async {
+                                await VpnService.disconnect();
+                                Get.snackbar('Disconnected', 'VPN disconnected');
+                              },
+                              child: Text('Disconnect', style: TextStyle(color: Colors.red)),
+                            ),
+                        ],
+                      ),
+                    ),
                     const SizedBox(height: 20),
                     Row(children: [Expanded(child: _quickAction('Packages', Icons.shopping_bag, Colors.cyan, () => Get.toNamed('/packages'))), const SizedBox(width: 12), Expanded(child: _quickAction('Voucher', Icons.card_giftcard, Colors.orange, () => Get.toNamed('/voucher')))]),
                   ],
@@ -589,6 +656,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+// ============================================================
+// PACKAGES SCREEN
+// ============================================================
 class PackagesScreen extends StatefulWidget {
   const PackagesScreen({super.key});
 
@@ -647,7 +717,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
 }
 
 // ============================================================
-// PAYMENT SCREEN - REAL GOSENTEPAY INTEGRATION
+// PAYMENT SCREEN
 // ============================================================
 class PaymentScreen extends StatefulWidget {
   final Map<String, dynamic> package;
@@ -682,9 +752,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
       Get.snackbar('Error', 'Valid phone required', backgroundColor: Colors.red, colorText: Colors.white);
       return;
     }
+
     setState(() {
       loading = true;
-      statusMessage = 'Initiating payment...';
+      statusMessage = 'Processing...';
       statusColor = Colors.cyan;
     });
 
@@ -695,7 +766,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
       return;
     }
 
-    // Call GosentePay
     final result = await GosentePayService.initiatePayment(
       phone: phone.text.trim(),
       amount: widget.package['price'].toDouble(),
@@ -706,13 +776,91 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     if (result['success']) {
       setState(() {
-        paymentInitiated = true;
-        paymentRef = result['reference'];
-        statusMessage = 'Payment initiated! Check your phone.';
-        statusColor = Colors.green;
         loading = false;
+        statusMessage = '✅ Package purchased!';
+        statusColor = Colors.green;
       });
-      _pollPaymentStatus(paymentRef);
+
+      final creds = result['vpnCredentials'];
+      final vpnServer = creds['server'];
+      final vpnUsername = creds['username'];
+      final vpnPassword = creds['password'];
+
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1A1F3A),
+          title: Text('✅ Ready to Connect!', style: TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Your subscription is active!', style: TextStyle(color: Colors.white)),
+              SizedBox(height: 16),
+              Container(
+                padding: EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey[800],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Server: $vpnServer', style: TextStyle(color: Colors.cyan)),
+                    Text('Username: $vpnUsername', style: TextStyle(color: Colors.white)),
+                    Text('Password: $vpnPassword', style: TextStyle(color: Colors.white)),
+                  ],
+                ),
+              ),
+              SizedBox(height: 12),
+              Text(
+                'The app will use your network bars to connect.',
+                style: TextStyle(color: Colors.grey[400], fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Get.back();
+                Get.offAllNamed('/home');
+              },
+              child: Text('Go Home', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Get.back();
+                try {
+                  await VpnService.connect(
+                    username: vpnUsername,
+                    password: vpnPassword,
+                  );
+                  Get.snackbar(
+                    'Connected! 🎉',
+                    'You now have internet through Spenix!',
+                    backgroundColor: Colors.green,
+                    colorText: Colors.white,
+                    duration: Duration(seconds: 5),
+                  );
+                  Get.offAllNamed('/home');
+                } catch (e) {
+                  Get.snackbar(
+                    'Connection Failed',
+                    'Please check your network bars and try again.',
+                    backgroundColor: Colors.red,
+                    colorText: Colors.white,
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.cyan,
+              ),
+              child: Text('Connect Now'),
+            ),
+          ],
+        ),
+      );
     } else {
       setState(() {
         loading = false;
@@ -888,6 +1036,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 }
 
+// ============================================================
+// VOUCHER SCREEN
+// ============================================================
 class VoucherScreen extends StatefulWidget {
   const VoucherScreen({super.key});
 
@@ -972,6 +1123,9 @@ class _VoucherScreenState extends State<VoucherScreen> {
   }
 }
 
+// ============================================================
+// ACCOUNT SCREEN
+// ============================================================
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
 
@@ -1041,6 +1195,9 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 }
 
+// ============================================================
+// ADMIN DASHBOARD
+// ============================================================
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
 
@@ -1144,6 +1301,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 }
 
+// ============================================================
+// ADMIN USERS SCREEN
+// ============================================================
 class AdminUsersScreen extends StatefulWidget {
   const AdminUsersScreen({super.key});
 
@@ -1204,6 +1364,9 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 }
 
+// ============================================================
+// ADMIN PACKAGES SCREEN
+// ============================================================
 class AdminPackagesScreen extends StatefulWidget {
   const AdminPackagesScreen({super.key});
 
@@ -1289,6 +1452,9 @@ class _AdminPackagesScreenState extends State<AdminPackagesScreen> {
   }
 }
 
+// ============================================================
+// ADMIN PAYMENTS SCREEN
+// ============================================================
 class AdminPaymentsScreen extends StatefulWidget {
   const AdminPaymentsScreen({super.key});
 
@@ -1342,6 +1508,9 @@ class _AdminPaymentsScreenState extends State<AdminPaymentsScreen> {
   }
 }
 
+// ============================================================
+// ADMIN VOUCHERS SCREEN
+// ============================================================
 class AdminVouchersScreen extends StatefulWidget {
   const AdminVouchersScreen({super.key});
 
