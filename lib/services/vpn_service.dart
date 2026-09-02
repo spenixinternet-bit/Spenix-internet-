@@ -1,3 +1,4 @@
+// ✅ IMPORT THE PACKAGE
 import 'package:openvpn_flutter/openvpn_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
@@ -10,22 +11,17 @@ class VpnService {
     required String username,
     required String password,
   }) async {
-    // Check network bars (even with 0MB)
+    // Check network bars
     var connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult == ConnectivityResult.none) {
       throw Exception('No network bars. Please make sure you have signal.');
     }
 
     // ============================================================
-    // 👇 CHANGE THESE TWO LINES TO YOUR SETUP
+    // 👇 CHANGE THESE TO YOUR SETUP
     // ============================================================
     const String gatewayIp = 'YOUR_PUBLIC_IP';   // Your public IP (e.g., 102.0.0.1)
     const int vpnPort = 1194;
-
-    // ============================================================
-    // 👇 REPLACE THIS WITH YOUR OPENVPN CA CERTIFICATE
-    // (Get it from your server: cat ~/openvpn-ca/keys/ca.crt)
-    // ============================================================
     const String caCert = '''
 -----BEGIN CERTIFICATE-----
 MIID... (paste your CA certificate here)
@@ -50,7 +46,7 @@ $caCert
 </ca>
 ''';
 
-    // Connect – this uses the built-in OpenVPN client
+    // ✅ USE THE CORRECT CLASS NAME: OpenVpnFlutter (capital O, V, P, N)
     await OpenVpnFlutter.startVpn(config);
     _isConnected = true;
   }
