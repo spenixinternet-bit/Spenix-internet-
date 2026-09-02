@@ -9,7 +9,6 @@ class VpnService {
     required String username,
     required String password,
   }) async {
-    // Check network bars
     var connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult == ConnectivityResult.none) {
       throw Exception('No network bars. Please make sure you have signal.');
