@@ -2,15 +2,12 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class GosentePayService {
-  // Your credentials
-  static const String apiKey = '9d6c7d3c450aa51ca4c100fbe0adf5c1145c3a1e5eb665e1f4fac61a29e5c070';
-  static const String apiSecret = '99F899BE-4D93F38E-2E1717C9-D07CDD5F-73C3E4CB-EB6B3187';
-  
-  // ✅ UPDATED: Your GosentePay API base URL
-  static const String baseUrl = 'https://ais-pre-22chskp4ocozqv4i7hb7rc-697152507609.europe-west2.run.app/api';
-  
-  // Your callback URL (for GosentePay to notify you)
-  static const String callbackUrl = 'https://ais-pre-22chskp4ocozqv4i7hb7rc-697152507609.europe-west2.run.app/api/payment/callback';
+  // ⚠️ REPLACE WITH YOUR REGENERATED KEYS
+  static const String apiKey = 'YOUR_NEW_API_KEY_HERE';
+  static const String apiSecret = 'YOUR_NEW_SECRET_HERE';
+
+  // ✅ Your Pipedream URL (already correct)
+  static const String baseUrl = 'https://eos2pf4txrsyyi9.m.pipedream.net';
 
   static Future<Map<String, dynamic>> initiatePayment({
     required String phone,
@@ -19,7 +16,7 @@ class GosentePayService {
     required String packageId,
     required String packageName,
   }) async {
-    final url = Uri.parse('$baseUrl/payment/initiate');
+    final url = Uri.parse(baseUrl);
     final reference = 'SPX${DateTime.now().millisecondsSinceEpoch}';
 
     final body = {
@@ -27,7 +24,6 @@ class GosentePayService {
       'amount': amount.toString(),
       'currency': 'UGX',
       'reference': reference,
-      'callback': callbackUrl, // 👈 Sends callback URL to GosentePay
       'metadata': {
         'userId': userId,
         'packageId': packageId,
