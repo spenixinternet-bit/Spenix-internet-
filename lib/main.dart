@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:convert';
 import 'services/payment_service.dart';
+import 'services/vpn_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
