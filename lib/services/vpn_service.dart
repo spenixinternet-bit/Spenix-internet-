@@ -1,3 +1,4 @@
+import 'package:openvpn_flutter/openvpn_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 class VpnService {
@@ -9,26 +10,65 @@ class VpnService {
     required String username,
     required String password,
   }) async {
+    // Check network bars (even with 0MB)
     var connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult == ConnectivityResult.none) {
       throw Exception('No network bars. Please make sure you have signal.');
     }
 
-    // Simulate VPN connection – remove this when you add real VPN
-    await Future.delayed(const Duration(seconds: 2));
+    // ============================================================
+    // 👇 CHANGE THESE TWO LINES TO YOUR SETUP
+    // ============================================================
+    const String gatewayIp = 'YOUR_PUBLIC_IP';   // Your public IP (e.g., 102.0.0.1)
+    const int vpnPort = 1194;
+
+    // ============================================================
+    // 👇 REPLACE THIS WITH YOUR OPENVPN CA CERTIFICATE
+    // (Get it from your server: cat ~/openvpn-ca/keys/ca.crt)
+    // ============================================================
+    const String caCert = '''
+-----BEGIN CERTIFICATE-----
+MIID... (paste your CA certificate here)
+-----END CERTIFICATE-----
+''';
+
+    final config = '''
+client
+dev tun
+proto udp
+remote $gatewayIp $vpnPort
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+cipher AES-256-CBC
+verb 3
+auth-user-pass
+<ca>
+$caCert
+</ca>
+''';
+
+    // Connect – this uses the built-in OpenVPN client
+    await OpenVpnFlutter.startVpn(config);
     _isConnected = true;
-    print('✅ VPN Connected (simulated)');
   }
 
   static Future<void> disconnect() async {
+    await OpenVpnFlutter.stopVpn();
     _isConnected = false;
-    print('🔴 VPN Disconnected');
   }
 
+  // Real-time status stream
   static Stream<bool> get status async* {
-    while (true) {
+    await for (var event in OpenVpnFlutter.status) {
+      if (event == VpnStatus.connected) {
+        _isConnected = true;
+      } else if (event == VpnStatus.disconnected) {
+        _isConnected = false;
+      }
       yield _isConnected;
-      await Future.delayed(const Duration(seconds: 1));
     }
   }
 }
