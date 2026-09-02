@@ -2,11 +2,12 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class GosentePayService {
-  // ⚠️ REPLACE WITH YOUR REGENERATED KEYS
-  static const String apiKey = 'YOUR_NEW_API_KEY_HERE';
-  static const String apiSecret = 'YOUR_NEW_SECRET_HERE';
+  // ✅ OFFLINE MODE – Users buy with 0MB data
+  static const bool offlineMode = true;
 
-  // ✅ Your Pipedream URL (already correct)
+  // These are only used if offlineMode = false
+  static const String apiKey = 'YOUR_API_KEY';
+  static const String apiSecret = 'YOUR_SECRET';
   static const String baseUrl = 'https://eos2pf4txrsyyi9.m.pipedream.net';
 
   static Future<Map<String, dynamic>> initiatePayment({
@@ -16,6 +17,34 @@ class GosentePayService {
     required String packageId,
     required String packageName,
   }) async {
+    // ============================================================
+    // OFFLINE MODE – 0MB DATA USAGE
+    // The user buys the package locally without internet
+    // ============================================================
+    if (offlineMode) {
+      await Future.delayed(const Duration(seconds: 1));
+
+      // Generate VPN credentials for the user
+      final vpnUsername = userId;
+      final vpnPassword = 'VPN${DateTime.now().millisecondsSinceEpoch}';
+
+      return {
+        'success': true,
+        'reference': 'OFFLINE-${DateTime.now().millisecondsSinceEpoch}',
+        'status': 'success',
+        'message': '✅ Package purchased successfully!',
+        'offline': true,
+        'vpnCredentials': {
+          'server': 'YOUR_GATEWAY_IP', // 👈 CHANGE THIS TO YOUR GATEWAY IP
+          'username': vpnUsername,
+          'password': vpnPassword,
+        },
+      };
+    }
+
+    // ============================================================
+    // ONLINE MODE – Real payment (uses mobile data)
+    // ============================================================
     final url = Uri.parse(baseUrl);
     final reference = 'SPX${DateTime.now().millisecondsSinceEpoch}';
 
@@ -68,6 +97,22 @@ class GosentePayService {
   }
 
   static Future<Map<String, dynamic>> verifyPayment(String reference) async {
+    // ============================================================
+    // OFFLINE MODE – Skip verification (0MB data)
+    // ============================================================
+    if (offlineMode) {
+      return {
+        'success': true,
+        'status': 'success',
+        'reference': reference,
+        'message': '✅ Subscription activated!',
+        'offline': true,
+      };
+    }
+
+    // ============================================================
+    // ONLINE MODE – Real verification (uses data)
+    // ============================================================
     final url = Uri.parse('$baseUrl/payment/verify/$reference');
 
     try {
