@@ -1,24 +1,67 @@
-name: spenix_internet
-description: Spenix Internet Service Provider App
-publish_to: 'none'
-version: 1.0.0+1
+import 'package:openvpn_flutter/openvpn_flutter.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
-environment:
-  sdk: '>=3.0.0 <4.0.0'
+class VpnService {
+  static bool _isConnected = false;
 
-dependencies:
-  flutter:
-    sdk: flutter
-  get: ^4.6.6
-  shared_preferences: ^2.2.2
-  uuid: ^4.2.1
-  http: ^1.2.2
-  openvpn_connect: ^0.0.15
-  connectivity_plus: ^5.0.2
+  static bool get isConnected => _isConnected;
 
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
+  static Future<void> connect({
+    required String username,
+    required String password,
+  }) async {
+    // Check network bars
+    var connectivityResult = await Connectivity().checkConnectivity();
+    if (connectivityResult == ConnectivityResult.none) {
+      throw Exception('No network bars. Please make sure you have signal.');
+    }
 
-flutter:
-  uses-material-design: true
+    // ============================================================
+    // CHANGE THIS TO YOUR GATEWAY IP
+    // ============================================================
+    const String gatewayIp = 'YOUR_GATEWAY_IP'; // 👈 REPLACE WITH YOUR IP
+    const int vpnPort = 1194;
+    const String vpnProtocol = 'udp';
+
+    // Build OpenVPN configuration
+    final config = '''
+client
+dev tun
+proto $vpnProtocol
+remote $gatewayIp $vpnPort
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+cipher AES-256-CBC
+verb 3
+auth-user-pass
+<ca>
+-----BEGIN CERTIFICATE-----
+YOUR_CA_CERT_HERE
+-----END CERTIFICATE-----
+</ca>
+''';
+
+    // Connect using OpenVPN Flutter
+    await OpenVpnFlutter.startVpn(config);
+    _isConnected = true;
+  }
+
+  static Future<void> disconnect() async {
+    await OpenVpnFlutter.stopVpn();
+    _isConnected = false;
+  }
+
+  static Stream<bool> get status async* {
+    await for (var event in OpenVpnFlutter.status) {
+      if (event == VpnStatus.connected) {
+        _isConnected = true;
+      } else if (event == VpnStatus.disconnected) {
+        _isConnected = false;
+      }
+      yield _isConnected;
+    }
+  }
+}
