@@ -1,4 +1,3 @@
-import 'package:openvpn_flutter/openvpn_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 
 class VpnService {
@@ -16,52 +15,21 @@ class VpnService {
       throw Exception('No network bars. Please make sure you have signal.');
     }
 
-    // ============================================================
-    // CHANGE THIS TO YOUR GATEWAY IP
-    // ============================================================
-    const String gatewayIp = 'YOUR_GATEWAY_IP'; // 👈 REPLACE WITH YOUR IP
-    const int vpnPort = 1194;
-    const String vpnProtocol = 'udp';
-
-    // Build OpenVPN configuration
-    final config = '''
-client
-dev tun
-proto $vpnProtocol
-remote $gatewayIp $vpnPort
-resolv-retry infinite
-nobind
-persist-key
-persist-tun
-remote-cert-tls server
-cipher AES-256-CBC
-verb 3
-auth-user-pass
-<ca>
------BEGIN CERTIFICATE-----
-YOUR_CA_CERT_HERE
------END CERTIFICATE-----
-</ca>
-''';
-
-    // Connect using OpenVPN Flutter
-    await OpenVpnFlutter.startVpn(config);
+    // Simulate VPN connection – remove this when you add real VPN
+    await Future.delayed(const Duration(seconds: 2));
     _isConnected = true;
+    print('✅ VPN Connected (simulated)');
   }
 
   static Future<void> disconnect() async {
-    await OpenVpnFlutter.stopVpn();
     _isConnected = false;
+    print('🔴 VPN Disconnected');
   }
 
   static Stream<bool> get status async* {
-    await for (var event in OpenVpnFlutter.status) {
-      if (event == VpnStatus.connected) {
-        _isConnected = true;
-      } else if (event == VpnStatus.disconnected) {
-        _isConnected = false;
-      }
+    while (true) {
       yield _isConnected;
+      await Future.delayed(const Duration(seconds: 1));
     }
   }
 }
