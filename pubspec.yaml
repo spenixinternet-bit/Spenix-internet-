@@ -13,7 +13,7 @@ dependencies:
   shared_preferences: ^2.2.2
   uuid: ^4.2.1
   http: ^1.2.2
-  connectivity_plus: ^5.0.2   # Only used for checking network bars
+  connectivity_plus: ^5.0.2
 
 dev_dependencies:
   flutter_test:
