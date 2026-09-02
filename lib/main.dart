@@ -525,7 +525,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? user;
   Map<String, dynamic>? sub;
   bool loading = true;
-  VpnStatus? _vpnStatus;
+  bool _vpnConnected = false;
 
   @override
   void initState() {
@@ -535,9 +535,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _listenToVpnStatus() {
-    VpnService.status.listen((status) {
+    VpnService.status.listen((connected) {
       setState(() {
-        _vpnStatus = status;
+        _vpnConnected = connected;
       });
     });
   }
@@ -591,34 +591,28 @@ class _HomeScreenState extends State<HomeScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: _vpnStatus == VpnStatus.connected 
-                            ? Colors.green.withOpacity(0.1) 
-                            : Colors.red.withOpacity(0.1),
+                        color: _vpnConnected ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: _vpnStatus == VpnStatus.connected ? Colors.green : Colors.red,
+                          color: _vpnConnected ? Colors.green : Colors.red,
                         ),
                       ),
                       child: Row(
                         children: [
                           Icon(
-                            _vpnStatus == VpnStatus.connected 
-                                ? Icons.vpn_key 
-                                : Icons.vpn_key_off,
-                            color: _vpnStatus == VpnStatus.connected ? Colors.green : Colors.red,
+                            _vpnConnected ? Icons.vpn_key : Icons.vpn_key_off,
+                            color: _vpnConnected ? Colors.green : Colors.red,
                           ),
                           const SizedBox(width: 12),
                           Text(
-                            _vpnStatus == VpnStatus.connected 
-                                ? '🟢 VPN Connected' 
-                                : '🔴 VPN Disconnected',
+                            _vpnConnected ? '🟢 VPN Connected' : '🔴 VPN Disconnected',
                             style: TextStyle(
-                              color: _vpnStatus == VpnStatus.connected ? Colors.green : Colors.red,
+                              color: _vpnConnected ? Colors.green : Colors.red,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                           const Spacer(),
-                          if (_vpnStatus == VpnStatus.connected)
+                          if (_vpnConnected)
                             TextButton(
                               onPressed: () async {
                                 await VpnService.disconnect();
