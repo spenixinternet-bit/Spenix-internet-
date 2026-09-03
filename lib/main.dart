@@ -67,7 +67,7 @@ class MyApp extends StatelessWidget {
 }
 
 // ============================================================
-// SPLASH SCREEN
+// SPLASH SCREEN – DOPE DESIGN
 // ============================================================
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -76,11 +76,23 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen> with TickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeIn;
+
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(seconds: 2), () {
+    _controller = AnimationController(
+      duration: const Duration(seconds: 2),
+      vsync: this,
+    );
+    _fadeIn = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeIn,
+    ));
+    _controller.forward();
+    Future.delayed(const Duration(seconds: 4), () {
       _checkAuth();
     });
   }
@@ -96,6 +108,12 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
@@ -103,30 +121,125 @@ class _SplashScreenState extends State<SplashScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF0A0E27), Color(0xFF1A1F3A)],
+            colors: [
+              Color(0xFF0A0E27),
+              Color(0xFF1A1F3A),
+              Color(0xFF0D1B2A),
+            ],
           ),
         ),
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                width: 100,
-                height: 100,
-                decoration: BoxDecoration(
-                  color: Colors.cyan.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.cyan, width: 3),
-                  boxShadow: [BoxShadow(color: Colors.cyan.withOpacity(0.3), blurRadius: 30)],
+          child: FadeTransition(
+            opacity: _fadeIn,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 140,
+                  height: 140,
+                  decoration: BoxDecoration(
+                    color: Colors.cyan.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.cyan, width: 4),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.cyan.withOpacity(0.4),
+                        blurRadius: 40,
+                        spreadRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: const Center(
+                    child: Icon(
+                      Icons.wifi,
+                      size: 70,
+                      color: Colors.cyan,
+                    ),
+                  ),
                 ),
-                child: const Icon(Icons.wifi, size: 50, color: Colors.cyan),
-              ),
-              const SizedBox(height: 20),
-              const Text('SPENIX', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)),
-              const Text('INTERNET', style: TextStyle(fontSize: 16, color: Colors.cyan, letterSpacing: 4)),
-              const SizedBox(height: 30),
-              const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(Colors.cyan)),
-            ],
+                const SizedBox(height: 30),
+                const Text(
+                  'SPENIX',
+                  style: TextStyle(
+                    fontSize: 42,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 6,
+                    shadows: [
+                      Shadow(
+                        color: Colors.cyan,
+                        blurRadius: 20,
+                      ),
+                    ],
+                  ),
+                ),
+                const Text(
+                  'INTERNET',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w300,
+                    color: Colors.cyan,
+                    letterSpacing: 10,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'GET READY FOR\nTHE ULTIMATE\nCONNECTION',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    height: 1.2,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Colors.cyan.withOpacity(0.3), Colors.cyan.withOpacity(0.1)],
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.cyan.withOpacity(0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.star, color: Colors.cyan, size: 16),
+                      SizedBox(width: 6),
+                      Text(
+                        'Fast • Stable • Unlimited',
+                        style: TextStyle(
+                          color: Colors.cyan,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 40),
+                SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.cyan),
+                    backgroundColor: Colors.grey[800],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'CONNECTING YOU...',
+                  style: TextStyle(
+                    color: Colors.cyan,
+                    fontSize: 12,
+                    letterSpacing: 3,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -530,7 +643,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 }
 
 // ============================================================
-// HOME SCREEN (with Live Stats)
+// HOME SCREEN – with Live Stats, Round Button, Correct Subscription Check
 // ============================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -545,8 +658,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Map<String, dynamic>? sub;
   bool loading = true;
   bool _vpnConnected = false;
-
-  // Live stats
   double _speed = 0;
   double _uptime = 0;
   int _activeUsers = 1;
@@ -601,8 +712,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _handleConnect() async {
+    // 🔥 FIX: Always check the latest subscription status before connecting
+    if (user != null) {
+      sub = await db.getActiveSubscription(user!['id']);
+    }
     if (sub == null) {
-      Get.snackbar('Connection Failed', 'No active subscription. Buy a package or use a voucher.',
+      Get.snackbar('Connection Failed', 'No active subscription. Please buy a package or use a voucher.',
           backgroundColor: Colors.red, colorText: Colors.white, duration: const Duration(seconds: 4));
       return;
     }
@@ -658,53 +773,50 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                           const SizedBox(height: 16),
                           Text(sub != null ? 'Active Plan' : 'No Active Subscription', style: const TextStyle(color: Colors.white, fontSize: 18)),
                           const SizedBox(height: 16),
-                          Row(children: [Expanded(child: ElevatedButton(onPressed: () => Get.toNamed('/packages'), style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan), child: const Text('BUY INTERNET')))]),
+                          // Round Connect Button
+                          Center(
+                            child: GestureDetector(
+                              onTap: _handleConnect,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                width: 80,
+                                height: 80,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    colors: _vpnConnected ? [Colors.green, Colors.green.shade800] : [Colors.red, Colors.red.shade800],
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: (_vpnConnected ? Colors.green : Colors.red).withOpacity(0.4),
+                                      blurRadius: 20,
+                                      spreadRadius: 5,
+                                    ),
+                                  ],
+                                ),
+                                child: Icon(
+                                  _vpnConnected ? Icons.power_settings_new : Icons.power_off,
+                                  color: Colors.white,
+                                  size: 36,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Center(
+                            child: Text(
+                              _vpnConnected ? 'CONNECTED' : 'TAP TO CONNECT',
+                              style: TextStyle(
+                                color: _vpnConnected ? Colors.green : Colors.red,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 20),
-                    // Round Connect Button
-                    Center(
-                      child: GestureDetector(
-                        onTap: _handleConnect,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              colors: _vpnConnected ? [Colors.green, Colors.green.shade800] : [Colors.red, Colors.red.shade800],
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: (_vpnConnected ? Colors.green : Colors.red).withOpacity(0.4),
-                                blurRadius: 20,
-                                spreadRadius: 5,
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            _vpnConnected ? Icons.power_settings_new : Icons.power_off,
-                            color: Colors.white,
-                            size: 36,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Center(
-                      child: Text(
-                        _vpnConnected ? 'CONNECTED' : 'TAP TO CONNECT',
-                        style: TextStyle(
-                          color: _vpnConnected ? Colors.green : Colors.red,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    // Live Stats
                     if (_vpnConnected) ...[
                       Row(
                         children: [
@@ -874,6 +986,7 @@ class _PackagesScreenState extends State<PackagesScreen> {
               });
               Get.back();
               Get.snackbar('Success', 'Package activated!', backgroundColor: Colors.green, colorText: Colors.white);
+              // 🔥 Force reload home to refresh subscription status
               Get.offAllNamed('/home');
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan),
@@ -1022,6 +1135,7 @@ class _VoucherScreenState extends State<VoucherScreen> {
     });
     setState(() => loading = false);
     Get.snackbar('Success', 'Voucher applied!', backgroundColor: Colors.green, colorText: Colors.white);
+    // 🔥 Force reload home to refresh subscription status
     Get.offAllNamed('/home');
   }
 
@@ -1227,7 +1341,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ]),
           ),
           const SizedBox(height: 20),
-          // ===================== GATEWAY TOGGLE =====================
+          // Gateway Toggle
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -1517,7 +1631,7 @@ class _AdminPaymentsScreenState extends State<AdminPaymentsScreen> {
 }
 
 // ============================================================
-// ADMIN VOUCHERS SCREEN
+// ADMIN VOUCHERS SCREEN – FIXED FREEZE
 // ============================================================
 class AdminVouchersScreen extends StatefulWidget {
   const AdminVouchersScreen({super.key});
@@ -1546,39 +1660,79 @@ class _AdminVouchersScreenState extends State<AdminVouchersScreen> {
   void generate() {
     final count = TextEditingController();
     final days = TextEditingController();
+
     Get.dialog(
       AlertDialog(
         backgroundColor: const Color(0xFF1A1F3A),
         title: const Text('Generate Vouchers', style: TextStyle(color: Colors.white)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: count, style: const TextStyle(color: Colors.white), keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Count', labelStyle: TextStyle(color: Colors.grey))),
-          const SizedBox(height: 12),
-          TextField(controller: days, style: const TextStyle(color: Colors.white), keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Days', labelStyle: TextStyle(color: Colors.grey))),
-        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: count,
+              style: const TextStyle(color: Colors.white),
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Count', labelStyle: TextStyle(color: Colors.grey)),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: days,
+              style: const TextStyle(color: Colors.white),
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Days', labelStyle: TextStyle(color: Colors.grey)),
+            ),
+            const SizedBox(height: 16),
+            // 🔥 Loading indicator placeholder
+            Obx(() => Container()),
+          ],
+        ),
         actions: [
-          TextButton(onPressed: () => Get.back(), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
           TextButton(
+            onPressed: () => Get.back(),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
             onPressed: () async {
               final c = int.tryParse(count.text) ?? 5;
               final d = int.tryParse(days.text) ?? 1;
-              final List<Map<String, dynamic>> newVouchers = [];
-              for (int i = 0; i < c; i++) {
-                newVouchers.add({
-                  'id': const Uuid().v4(),
-                  'code': 'FREE${DateTime.now().millisecondsSinceEpoch % 10000}',
-                  'durationDays': d,
-                  'isUsed': false,
-                  'createdAt': DateTime.now().toIso8601String()
-                });
+
+              // Show loading overlay
+              Get.dialog(
+                const Center(
+                  child: CircularProgressIndicator(),
+                ),
+                barrierDismissible: false,
+              );
+
+              try {
+                // Generate vouchers (heavy work)
+                final List<Map<String, dynamic>> newVouchers = [];
+                for (int i = 0; i < c; i++) {
+                  newVouchers.add({
+                    'id': const Uuid().v4(),
+                    'code': 'FREE${DateTime.now().millisecondsSinceEpoch % 10000}',
+                    'durationDays': d,
+                    'isUsed': false,
+                    'createdAt': DateTime.now().toIso8601String()
+                  });
+                }
+                final all = await db.getVouchers();
+                all.addAll(newVouchers);
+                await db.saveVouchers(all);
+
+                // Close loading
+                Get.back();
+                // Close dialog
+                Get.back();
+                load();
+                Get.snackbar('Success', '$c vouchers generated', backgroundColor: Colors.green, colorText: Colors.white);
+              } catch (e) {
+                Get.back(); // close loading
+                Get.snackbar('Error', 'Failed to generate vouchers', backgroundColor: Colors.red, colorText: Colors.white);
               }
-              final all = await db.getVouchers();
-              all.addAll(newVouchers);
-              await db.saveVouchers(all);
-              Get.back();
-              load();
-              Get.snackbar('Success', '$c vouchers generated', backgroundColor: Colors.green, colorText: Colors.white);
             },
-            child: const Text('Generate', style: TextStyle(color: Colors.cyan)),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.cyan),
+            child: const Text('Generate'),
           ),
         ],
       ),
