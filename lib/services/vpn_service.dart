@@ -10,15 +10,12 @@ class VpnService {
     required String username,
     required String password,
   }) async {
-    // Check network bars
     var connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult == ConnectivityResult.none) {
       throw Exception('No network bars. Please make sure you have signal.');
     }
 
-    // ============================================================
-    // 👇 CHANGE THESE TWO LINES TO YOUR SETUP
-    // ============================================================
+    // 👇 CHANGE THESE TWO
     const String gatewayIp = 'YOUR_GATEWAY_PUBLIC_IP';   // e.g., 102.0.0.1
     const String caCert = '''
 -----BEGIN CERTIFICATE-----
@@ -26,7 +23,6 @@ YOUR_CA_CERTIFICATE_HERE
 -----END CERTIFICATE-----
 ''';
 
-    // Build OpenVPN client configuration
     final config = '''
 client
 dev tun
@@ -45,7 +41,6 @@ $caCert
 </ca>
 ''';
 
-    // Connect using OpenVPN Flutter (the app IS the VPN client)
     await OpenVpnFlutter.startVpn(config);
     _isConnected = true;
   }
