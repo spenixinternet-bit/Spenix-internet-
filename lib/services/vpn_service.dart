@@ -1,8 +1,9 @@
-import 'package:openvpn_flutter/openvpn_flutter.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/services.dart';
 
 class VpnService {
   static bool _isConnected = false;
+  static const MethodChannel _channel = MethodChannel('spenix_vpn');
 
   static bool get isConnected => _isConnected;
 
@@ -10,12 +11,15 @@ class VpnService {
     required String username,
     required String password,
   }) async {
+    // Check network bars
     var connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult == ConnectivityResult.none) {
       throw Exception('No network bars. Please make sure you have signal.');
     }
 
-    // 👇 CHANGE THESE TWO
+    // ============================================================
+    // 👇 CHANGE THESE TWO LINES TO YOUR SETUP
+    // ============================================================
     const String gatewayIp = 'YOUR_GATEWAY_PUBLIC_IP';   // e.g., 102.0.0.1
     const String caCert = '''
 -----BEGIN CERTIFICATE-----
@@ -23,6 +27,7 @@ YOUR_CA_CERTIFICATE_HERE
 -----END CERTIFICATE-----
 ''';
 
+    // Build OpenVPN configuration
     final config = '''
 client
 dev tun
@@ -41,23 +46,28 @@ $caCert
 </ca>
 ''';
 
-    await OpenVpnFlutter.startVpn(config);
-    _isConnected = true;
+    try {
+      // Call native Android VPN
+      await _channel.invokeMethod('connect', {'config': config});
+      _isConnected = true;
+    } catch (e) {
+      throw Exception('VPN connection failed: $e');
+    }
   }
 
   static Future<void> disconnect() async {
-    await OpenVpnFlutter.stopVpn();
-    _isConnected = false;
+    try {
+      await _channel.invokeMethod('disconnect');
+      _isConnected = false;
+    } catch (e) {
+      // ignore
+    }
   }
 
   static Stream<bool> get status async* {
-    await for (var event in OpenVpnFlutter.status) {
-      if (event == VpnStatus.connected) {
-        _isConnected = true;
-      } else if (event == VpnStatus.disconnected) {
-        _isConnected = false;
-      }
+    while (true) {
       yield _isConnected;
+      await Future.delayed(const Duration(seconds: 1));
     }
   }
 }
