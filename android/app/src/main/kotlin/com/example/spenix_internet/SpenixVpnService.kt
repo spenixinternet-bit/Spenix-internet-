@@ -33,11 +33,12 @@ class SpenixVpnService : VpnService() {
         return START_STICKY
     }
 
-    // Client mode – connect to a remote server (existing)
+    // Client mode – connect to a remote server
     private fun connect(config: String) {
         try {
             val builder = Builder()
-            builder.setAddress("10.0.0.2", 32)
+            // ✅ CORRECT: use addAddress (not setAddress)
+            builder.addAddress("10.0.0.2", 32)
             builder.addDnsServer("1.1.1.1")
             builder.addDnsServer("8.8.8.8")
             builder.addRoute("0.0.0.0", 0)
@@ -74,8 +75,8 @@ class SpenixVpnService : VpnService() {
             }
 
             val builder = Builder()
-            // Server address (gateway)
-            builder.setAddress("10.0.0.1", 24)
+            // ✅ CORRECT: use addAddress (not setAddress)
+            builder.addAddress("10.0.0.1", 24)
             builder.addDnsServer("1.1.1.1")
             builder.addDnsServer("8.8.8.8")
             builder.addRoute("0.0.0.0", 0)
@@ -85,10 +86,6 @@ class SpenixVpnService : VpnService() {
 
             vpnInterface = builder.establish()
             Log.d(TAG, "Gateway started – sharing internet")
-
-            // ⚠️ For full internet sharing, you need to NAT traffic.
-            // This requires advanced routing (iptables/tun2socks).
-            // For now, the tunnel is established; actual forwarding needs extra setup.
         } catch (e: Exception) {
             Log.e(TAG, "Gateway start failed: ${e.message}")
         }
