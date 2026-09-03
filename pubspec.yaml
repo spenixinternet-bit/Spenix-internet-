@@ -13,7 +13,7 @@ dependencies:
   shared_preferences: ^2.2.2
   uuid: ^4.2.1
   http: ^1.2.2
-  connectivity_plus: ^5.0.2
+  connectivity_plus: ^5.0.2   # ← Only this, no VPN packages
 
 dev_dependencies:
   flutter_test:
