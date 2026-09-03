@@ -27,7 +27,8 @@ class SpenixVpnService : VpnService() {
     private fun connect(config: String) {
         try {
             val builder = Builder()
-            builder.setAddress("10.0.0.2", 32)
+            // ✅ FIXED: use addAddress (not setAddress)
+            builder.addAddress("10.0.0.2", 32)
             builder.addDnsServer("1.1.1.1")
             builder.addDnsServer("8.8.8.8")
             builder.addRoute("0.0.0.0", 0)
