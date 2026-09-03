@@ -16,7 +16,7 @@ class VpnService {
       throw Exception('No network bars. Please make sure you have signal.');
     }
 
-    // 👇 CHANGE THESE TO YOUR SETUP
+    // 👇 YOUR GATEWAY DETAILS – REPLACE WITH YOUR OWN
     const String gatewayIp = 'YOUR_GATEWAY_PUBLIC_IP';
     const String caCert = '''
 -----BEGIN CERTIFICATE-----
@@ -43,7 +43,6 @@ $caCert
 ''';
 
     try {
-      // ⚡ THIS TRIGGERS THE NATIVE VPN – THIS IS WHY THE PERMISSION DIALOG APPEARS!
       await _channel.invokeMethod('connect', {'config': config});
       _isConnected = true;
     } catch (e) {
@@ -62,6 +61,25 @@ $caCert
     while (true) {
       yield _isConnected;
       await Future.delayed(const Duration(seconds: 1));
+    }
+  }
+
+  // ============================================================
+  // GATEWAY MODE METHODS (ADDED)
+  // ============================================================
+  static Future<void> startGateway() async {
+    try {
+      await _channel.invokeMethod('startGateway');
+    } catch (e) {
+      throw Exception('Failed to start gateway: $e');
+    }
+  }
+
+  static Future<void> stopGateway() async {
+    try {
+      await _channel.invokeMethod('stopGateway');
+    } catch (e) {
+      // ignore
     }
   }
 }
