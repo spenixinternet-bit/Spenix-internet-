@@ -11,23 +11,19 @@ class VpnService {
     required String username,
     required String password,
   }) async {
-    // Check network bars
     var connectivityResult = await Connectivity().checkConnectivity();
     if (connectivityResult == ConnectivityResult.none) {
       throw Exception('No network bars. Please make sure you have signal.');
     }
 
-    // ============================================================
-    // 👇 CHANGE THESE TWO LINES TO YOUR SETUP
-    // ============================================================
-    const String gatewayIp = 'YOUR_GATEWAY_PUBLIC_IP';   // e.g., 102.0.0.1
+    // 👇 CHANGE THESE TO YOUR SETUP
+    const String gatewayIp = 'YOUR_GATEWAY_PUBLIC_IP';
     const String caCert = '''
 -----BEGIN CERTIFICATE-----
 YOUR_CA_CERTIFICATE_HERE
 -----END CERTIFICATE-----
 ''';
 
-    // Build OpenVPN configuration
     final config = '''
 client
 dev tun
@@ -47,7 +43,7 @@ $caCert
 ''';
 
     try {
-      // Call native Android VPN
+      // ⚡ THIS TRIGGERS THE NATIVE VPN – THIS IS WHY THE PERMISSION DIALOG APPEARS!
       await _channel.invokeMethod('connect', {'config': config});
       _isConnected = true;
     } catch (e) {
@@ -59,9 +55,7 @@ $caCert
     try {
       await _channel.invokeMethod('disconnect');
       _isConnected = false;
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
   }
 
   static Stream<bool> get status async* {
