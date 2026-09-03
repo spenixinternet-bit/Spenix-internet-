@@ -17,14 +17,22 @@ class MainActivity : FlutterActivity() {
                     "connect" -> {
                         val config = call.argument<String>("config")
                         if (config != null) {
-                            startVpnService(config)
+                            startVpnClient(config)
                             result.success(true)
                         } else {
                             result.error("INVALID_CONFIG", "Config is null", null)
                         }
                     }
                     "disconnect" -> {
-                        stopVpnService()
+                        stopVpnClient()
+                        result.success(true)
+                    }
+                    "startGateway" -> {
+                        startGatewayService()
+                        result.success(true)
+                    }
+                    "stopGateway" -> {
+                        stopGatewayService()
                         result.success(true)
                     }
                     else -> result.notImplemented()
@@ -32,14 +40,27 @@ class MainActivity : FlutterActivity() {
             }
     }
 
-    private fun startVpnService(config: String) {
+    private fun startVpnClient(config: String) {
         val intent = Intent(this, SpenixVpnService::class.java).apply {
             putExtra("config", config)
+            putExtra("mode", "client")
         }
         startService(intent)
     }
 
-    private fun stopVpnService() {
+    private fun stopVpnClient() {
+        val intent = Intent(this, SpenixVpnService::class.java)
+        stopService(intent)
+    }
+
+    private fun startGatewayService() {
+        val intent = Intent(this, SpenixVpnService::class.java).apply {
+            putExtra("mode", "server")
+        }
+        startService(intent)
+    }
+
+    private fun stopGatewayService() {
         val intent = Intent(this, SpenixVpnService::class.java)
         stopService(intent)
     }
