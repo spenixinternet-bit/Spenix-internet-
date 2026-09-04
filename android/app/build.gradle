@@ -26,8 +26,12 @@ apply plugin: 'kotlin-android'
 apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 android {
-    compileSdkVersion 33
+    // ✅ FIX 1: compileSdkVersion 34 (was 33)
+    compileSdkVersion 34
     ndkVersion flutter.ndkVersion
+
+    // ✅ FIX 2: add namespace (required)
+    namespace 'com.example.spenix_internet'
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
@@ -45,7 +49,7 @@ android {
     defaultConfig {
         applicationId "com.example.spenix_internet"
         minSdkVersion 21
-        targetSdkVersion 33
+        targetSdkVersion 34
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }
