@@ -1,85 +1,91 @@
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/services.dart';
 
 class VpnService {
-  static bool _isConnected = false;
   static const MethodChannel _channel = MethodChannel('spenix_vpn');
+
+  static bool _isConnected = false;
 
   static bool get isConnected => _isConnected;
 
+  // ============================================================
+  // CONNECT VPN
+  // ============================================================
   static Future<void> connect({
     required String username,
     required String password,
   }) async {
-    var connectivityResult = await Connectivity().checkConnectivity();
-    if (connectivityResult == ConnectivityResult.none) {
-      throw Exception('No network bars. Please make sure you have signal.');
-    }
-
-    // 👇 YOUR GATEWAY DETAILS – REPLACE WITH YOUR OWN
-    const String gatewayIp = 'YOUR_GATEWAY_PUBLIC_IP';
-    const String caCert = '''
------BEGIN CERTIFICATE-----
-YOUR_CA_CERTIFICATE_HERE
------END CERTIFICATE-----
-''';
-
-    final config = '''
-client
-dev tun
-proto udp
-remote $gatewayIp 1194
-resolv-retry infinite
-nobind
-persist-key
-persist-tun
-remote-cert-tls server
-cipher AES-256-CBC
-verb 3
-auth-user-pass
-<ca>
-$caCert
-</ca>
-''';
-
     try {
-      await _channel.invokeMethod('connect', {'config': config});
-      _isConnected = true;
+      final result = await _channel.invokeMethod(
+        'connect',
+        {
+          'username': username,
+          'password': password,
+        },
+      );
+
+      if (result == true || result == 'connected') {
+        _isConnected = true;
+      }
+    } on PlatformException catch (e) {
+      throw Exception(
+        e.message ?? 'Failed to start Spenix VPN',
+      );
     } catch (e) {
-      throw Exception('VPN connection failed: $e');
+      throw Exception(
+        'VPN connection failed: $e',
+      );
     }
   }
 
+  // ============================================================
+  // DISCONNECT VPN
+  // ============================================================
   static Future<void> disconnect() async {
     try {
       await _channel.invokeMethod('disconnect');
       _isConnected = false;
-    } catch (e) {}
-  }
-
-  static Stream<bool> get status async* {
-    while (true) {
-      yield _isConnected;
-      await Future.delayed(const Duration(seconds: 1));
+    } catch (e) {
+      _isConnected = false;
     }
   }
 
   // ============================================================
-  // GATEWAY MODE METHODS (ADDED)
+  // VPN STATUS
+  // ============================================================
+  static Stream<bool> get status async* {
+    while (true) {
+      yield _isConnected;
+      await Future.delayed(
+        const Duration(seconds: 1),
+      );
+    }
+  }
+
+  // ============================================================
+  // START GATEWAY
   // ============================================================
   static Future<void> startGateway() async {
     try {
       await _channel.invokeMethod('startGateway');
+    } on PlatformException catch (e) {
+      throw Exception(
+        e.message ?? 'Failed to start Spenix gateway',
+      );
     } catch (e) {
-      throw Exception('Failed to start gateway: $e');
+      throw Exception(
+        'Failed to start gateway: $e',
+      );
     }
   }
 
+  // ============================================================
+  // STOP GATEWAY
+  // ============================================================
   static Future<void> stopGateway() async {
     try {
       await _channel.invokeMethod('stopGateway');
     } catch (e) {
-      // ignore
+      // Gateway may already be stopped.
     }
   }
 }
