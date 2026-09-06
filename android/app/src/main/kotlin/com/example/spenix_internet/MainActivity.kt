@@ -2,8 +2,6 @@ package com.example.spenix_internet
 
 import android.content.Intent
 import android.net.VpnService
-import android.os.Bundle
-import androidx.activity.result.contract.ActivityResultContracts
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -11,28 +9,13 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "spenix_vpn"
+    private val VPN_REQUEST_CODE = 1001
 
-    private var pendingMode: String? = null
-
-    private val vpnPermissionLauncher =
-        registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult()
-        ) { result ->
-
-            if (result.resultCode == RESULT_OK) {
-
-                val mode = pendingMode ?: "client"
-
-                startVpnService(mode)
-
-                pendingMode = null
-            }
-        }
+    private var pendingMode: String = "client"
 
     override fun configureFlutterEngine(
         flutterEngine: FlutterEngine
     ) {
-
         super.configureFlutterEngine(flutterEngine)
 
         MethodChannel(
@@ -42,41 +25,14 @@ class MainActivity : FlutterActivity() {
 
             when (call.method) {
 
-                // ====================================================
-                // CONNECT
-                // ====================================================
-
                 "connect" -> {
 
-                    val username =
-                        call.argument<String>("username")
+                    pendingMode = "client"
 
-                    val password =
-                        call.argument<String>("password")
-
-                    if (username == null ||
-                        password == null
-                    ) {
-
-                        result.error(
-                            "INVALID_LOGIN",
-                            "Username or password is missing",
-                            null
-                        )
-
-                        return@setMethodCallHandler
-                    }
-
-                    requestVpnPermissionAndStart(
-                        mode = "client"
-                    )
+                    requestVpnPermissionAndStart()
 
                     result.success(true)
                 }
-
-                // ====================================================
-                // DISCONNECT
-                // ====================================================
 
                 "disconnect" -> {
 
@@ -85,22 +41,14 @@ class MainActivity : FlutterActivity() {
                     result.success(true)
                 }
 
-                // ====================================================
-                // START GATEWAY
-                // ====================================================
-
                 "startGateway" -> {
 
-                    requestVpnPermissionAndStart(
-                        mode = "server"
-                    )
+                    pendingMode = "server"
+
+                    requestVpnPermissionAndStart()
 
                     result.success(true)
                 }
-
-                // ====================================================
-                // STOP GATEWAY
-                // ====================================================
 
                 "stopGateway" -> {
 
@@ -110,65 +58,43 @@ class MainActivity : FlutterActivity() {
                 }
 
                 else -> {
-
                     result.notImplemented()
                 }
             }
         }
     }
 
-    // ================================================================
-    // REQUEST VPN PERMISSION
-    // ================================================================
+    private fun requestVpnPermissionAndStart() {
 
-    private fun requestVpnPermissionAndStart(
-        mode: String
-    ) {
+        val intent = VpnService.prepare(this)
 
-        pendingMode = mode
+        if (intent != null) {
 
-        val prepareIntent =
-            VpnService.prepare(this)
-
-        if (prepareIntent != null) {
-
-            vpnPermissionLauncher.launch(
-                prepareIntent
+            startActivityForResult(
+                intent,
+                VPN_REQUEST_CODE
             )
 
         } else {
 
-            startVpnService(mode)
-
-            pendingMode = null
+            startVpnService()
         }
     }
 
-    // ================================================================
-    // START SPENIX VPN SERVICE
-    // ================================================================
-
-    private fun startVpnService(
-        mode: String
-    ) {
+    private fun startVpnService() {
 
         val intent = Intent(
             this,
             SpenixVpnService::class.java
-        ).apply {
+        )
 
-            putExtra(
-                "mode",
-                mode
-            )
-        }
+        intent.putExtra(
+            "mode",
+            pendingMode
+        )
 
         startService(intent)
     }
-
-    // ================================================================
-    // STOP SPENIX VPN SERVICE
-    // ================================================================
 
     private fun stopVpnService() {
 
@@ -178,5 +104,26 @@ class MainActivity : FlutterActivity() {
         )
 
         stopService(intent)
+    }
+
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?
+    ) {
+
+        super.onActivityResult(
+            requestCode,
+            resultCode,
+            data
+        )
+
+        if (
+            requestCode == VPN_REQUEST_CODE &&
+            resultCode == RESULT_OK
+        ) {
+
+            startVpnService()
+        }
     }
 }
