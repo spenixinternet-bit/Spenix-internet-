@@ -2,6 +2,8 @@ package com.example.spenix_internet
 
 import android.content.Intent
 import android.net.VpnService
+import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -9,9 +11,28 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "spenix_vpn"
-    private val VPN_REQUEST_CODE = 1001
 
-    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+    private var pendingMode: String? = null
+
+    private val vpnPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+
+            if (result.resultCode == RESULT_OK) {
+
+                val mode = pendingMode ?: "client"
+
+                startVpnService(mode)
+
+                pendingMode = null
+            }
+        }
+
+    override fun configureFlutterEngine(
+        flutterEngine: FlutterEngine
+    ) {
+
         super.configureFlutterEngine(flutterEngine)
 
         MethodChannel(
@@ -21,112 +42,141 @@ class MainActivity : FlutterActivity() {
 
             when (call.method) {
 
-                "connect" -> {
-                    val config = call.argument<String>("config")
+                // ====================================================
+                // CONNECT
+                // ====================================================
 
-                    if (config != null) {
-                        requestVpnPermissionAndStart(
-                            mode = "client",
-                            config = config
-                        )
-                        result.success(true)
-                    } else {
+                "connect" -> {
+
+                    val username =
+                        call.argument<String>("username")
+
+                    val password =
+                        call.argument<String>("password")
+
+                    if (username == null ||
+                        password == null
+                    ) {
+
                         result.error(
-                            "INVALID_CONFIG",
-                            "Config is null",
+                            "INVALID_LOGIN",
+                            "Username or password is missing",
                             null
                         )
+
+                        return@setMethodCallHandler
                     }
+
+                    requestVpnPermissionAndStart(
+                        mode = "client"
+                    )
+
+                    result.success(true)
                 }
+
+                // ====================================================
+                // DISCONNECT
+                // ====================================================
 
                 "disconnect" -> {
+
                     stopVpnService()
+
                     result.success(true)
                 }
+
+                // ====================================================
+                // START GATEWAY
+                // ====================================================
 
                 "startGateway" -> {
+
                     requestVpnPermissionAndStart(
-                        mode = "server",
-                        config = null
+                        mode = "server"
                     )
+
                     result.success(true)
                 }
 
+                // ====================================================
+                // STOP GATEWAY
+                // ====================================================
+
                 "stopGateway" -> {
+
                     stopVpnService()
+
                     result.success(true)
                 }
 
                 else -> {
+
                     result.notImplemented()
                 }
             }
         }
     }
 
-    private fun requestVpnPermissionAndStart(
-        mode: String,
-        config: String?
-    ) {
-        val intent = VpnService.prepare(this)
+    // ================================================================
+    // REQUEST VPN PERMISSION
+    // ================================================================
 
-        if (intent != null) {
-            // Android needs permission first
-            startActivityForResult(
-                intent,
-                VPN_REQUEST_CODE
+    private fun requestVpnPermissionAndStart(
+        mode: String
+    ) {
+
+        pendingMode = mode
+
+        val prepareIntent =
+            VpnService.prepare(this)
+
+        if (prepareIntent != null) {
+
+            vpnPermissionLauncher.launch(
+                prepareIntent
             )
+
         } else {
-            // Permission was already granted
-            startVpnService(mode, config)
+
+            startVpnService(mode)
+
+            pendingMode = null
         }
     }
 
+    // ================================================================
+    // START SPENIX VPN SERVICE
+    // ================================================================
+
     private fun startVpnService(
-        mode: String,
-        config: String?
+        mode: String
     ) {
+
         val intent = Intent(
             this,
             SpenixVpnService::class.java
         ).apply {
-            putExtra("mode", mode)
 
-            if (config != null) {
-                putExtra("config", config)
-            }
+            putExtra(
+                "mode",
+                mode
+            )
         }
 
         startService(intent)
     }
 
+    // ================================================================
+    // STOP SPENIX VPN SERVICE
+    // ================================================================
+
     private fun stopVpnService() {
+
         val intent = Intent(
             this,
             SpenixVpnService::class.java
         )
 
         stopService(intent)
-    }
-
-    override fun onActivityResult(
-        requestCode: Int,
-        resultCode: Int,
-        data: Intent?
-    ) {
-        super.onActivityResult(
-            requestCode,
-            resultCode,
-            data
-        )
-
-        if (requestCode == VPN_REQUEST_CODE &&
-            resultCode == RESULT_OK
-        ) {
-
-            // Permission granted.
-            // Gateway/client will be started
-            // when the command is requested again.
-        }
     }
 }
