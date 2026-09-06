@@ -2,6 +2,8 @@ package com.example.spenix_internet
 
 import android.content.Intent
 import android.net.VpnService
+import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -9,9 +11,18 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "spenix_vpn"
-    private val VPN_REQUEST_CODE = 1001
 
-    private var pendingMode: String = "client"
+    private var pendingMode = "client"
+
+    private val vpnPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.StartActivityForResult()
+        ) { result ->
+
+            if (result.resultCode == RESULT_OK) {
+                startVpnService()
+            }
+        }
 
     override fun configureFlutterEngine(
         flutterEngine: FlutterEngine
@@ -29,8 +40,9 @@ class MainActivity : FlutterActivity() {
 
                     pendingMode = "client"
 
-                    requestVpnPermissionAndStart()
+                    requestVpnPermission()
 
+                    // Tell Flutter the request was accepted.
                     result.success(true)
                 }
 
@@ -45,7 +57,7 @@ class MainActivity : FlutterActivity() {
 
                     pendingMode = "server"
 
-                    requestVpnPermissionAndStart()
+                    requestVpnPermission()
 
                     result.success(true)
                 }
@@ -64,66 +76,63 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun requestVpnPermissionAndStart() {
+    private fun requestVpnPermission() {
 
-        val intent = VpnService.prepare(this)
+        try {
 
-        if (intent != null) {
+            val intent = VpnService.prepare(this)
 
-            startActivityForResult(
-                intent,
-                VPN_REQUEST_CODE
-            )
+            if (intent != null) {
 
-        } else {
+                vpnPermissionLauncher.launch(intent)
 
-            startVpnService()
+            } else {
+
+                startVpnService()
+            }
+
+        } catch (e: Exception) {
+
+            e.printStackTrace()
         }
     }
 
     private fun startVpnService() {
 
-        val intent = Intent(
-            this,
-            SpenixVpnService::class.java
-        )
+        try {
 
-        intent.putExtra(
-            "mode",
-            pendingMode
-        )
+            val intent = Intent(
+                this,
+                SpenixVpnService::class.java
+            )
 
-        startService(intent)
+            intent.putExtra(
+                "mode",
+                pendingMode
+            )
+
+            startService(intent)
+
+        } catch (e: Exception) {
+
+            e.printStackTrace()
+        }
     }
 
     private fun stopVpnService() {
 
-        val intent = Intent(
-            this,
-            SpenixVpnService::class.java
-        )
+        try {
 
-        stopService(intent)
-    }
+            val intent = Intent(
+                this,
+                SpenixVpnService::class.java
+            )
 
-    override fun onActivityResult(
-        requestCode: Int,
-        resultCode: Int,
-        data: Intent?
-    ) {
+            stopService(intent)
 
-        super.onActivityResult(
-            requestCode,
-            resultCode,
-            data
-        )
+        } catch (e: Exception) {
 
-        if (
-            requestCode == VPN_REQUEST_CODE &&
-            resultCode == RESULT_OK
-        ) {
-
-            startVpnService()
+            e.printStackTrace()
         }
     }
 }
