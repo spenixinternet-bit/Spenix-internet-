@@ -10,6 +10,7 @@ class VpnService {
   // ============================================================
   // CONNECT VPN
   // ============================================================
+
   static Future<void> connect({
     required String username,
     required String password,
@@ -27,10 +28,14 @@ class VpnService {
         _isConnected = true;
       }
     } on PlatformException catch (e) {
+      _isConnected = false;
+
       throw Exception(
         e.message ?? 'Failed to start Spenix VPN',
       );
     } catch (e) {
+      _isConnected = false;
+
       throw Exception(
         'VPN connection failed: $e',
       );
@@ -40,21 +45,38 @@ class VpnService {
   // ============================================================
   // DISCONNECT VPN
   // ============================================================
+
   static Future<void> disconnect() async {
     try {
       await _channel.invokeMethod('disconnect');
+
+      // Immediately update Flutter state.
       _isConnected = false;
+    } on PlatformException catch (e) {
+      // Even if Android reports an error,
+      // Flutter should consider the VPN disconnected.
+      _isConnected = false;
+
+      throw Exception(
+        e.message ?? 'Failed to disconnect Spenix VPN',
+      );
     } catch (e) {
       _isConnected = false;
+
+      throw Exception(
+        'VPN disconnect failed: $e',
+      );
     }
   }
 
   // ============================================================
   // VPN STATUS
   // ============================================================
+
   static Stream<bool> get status async* {
     while (true) {
       yield _isConnected;
+
       await Future.delayed(
         const Duration(seconds: 1),
       );
@@ -64,14 +86,25 @@ class VpnService {
   // ============================================================
   // START GATEWAY
   // ============================================================
+
   static Future<void> startGateway() async {
     try {
-      await _channel.invokeMethod('startGateway');
+      final result = await _channel.invokeMethod(
+        'startGateway',
+      );
+
+      if (result == true || result == 'connected') {
+        _isConnected = true;
+      }
     } on PlatformException catch (e) {
+      _isConnected = false;
+
       throw Exception(
         e.message ?? 'Failed to start Spenix gateway',
       );
     } catch (e) {
+      _isConnected = false;
+
       throw Exception(
         'Failed to start gateway: $e',
       );
@@ -81,11 +114,14 @@ class VpnService {
   // ============================================================
   // STOP GATEWAY
   // ============================================================
+
   static Future<void> stopGateway() async {
     try {
       await _channel.invokeMethod('stopGateway');
+
+      _isConnected = false;
     } catch (e) {
-      // Gateway may already be stopped.
+      _isConnected = false;
     }
   }
 }
