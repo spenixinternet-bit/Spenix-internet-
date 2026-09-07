@@ -18,6 +18,9 @@ class SpenixVpnService : VpnService() {
         const val TAG = "SpenixVPN"
         const val CHANNEL_ID = "spenix_vpn_channel"
         const val NOTIFICATION_ID = 1001
+
+        const val ACTION_CONNECT = "com.example.spenix_internet.CONNECT"
+        const val ACTION_DISCONNECT = "com.example.spenix_internet.DISCONNECT"
     }
 
     override fun onStartCommand(
@@ -26,45 +29,47 @@ class SpenixVpnService : VpnService() {
         startId: Int
     ): Int {
 
+        val action = intent?.action
         val mode = intent?.getStringExtra("mode") ?: "client"
         val config = intent?.getStringExtra("config")
 
-        Log.d(TAG, "Spenix VPN command. Mode: $mode")
+        Log.d(
+            TAG,
+            "onStartCommand action=$action mode=$mode"
+        )
 
         // ============================================================
         // DISCONNECT
         // ============================================================
-        if (mode == "disconnect") {
 
-            Log.d(TAG, "Disconnecting Spenix VPN")
+        if (
+            action == ACTION_DISCONNECT ||
+            mode == "disconnect"
+        ) {
 
-            stopVpnInterface()
+            Log.d(TAG, "DISCONNECT command received")
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-            } else {
-                @Suppress("DEPRECATION")
-                stopForeground(true)
-            }
-
-            stopSelf()
+            disconnectVpn()
 
             return START_NOT_STICKY
         }
 
         // ============================================================
-        // STOP OLD VPN INTERFACE
+        // MAKE SURE ANY OLD VPN IS CLOSED
         // ============================================================
+
         stopVpnInterface()
 
         // ============================================================
         // START FOREGROUND SERVICE
         // ============================================================
+
         startVpnForeground()
 
         // ============================================================
-        // START CLIENT OR GATEWAY
+        // START VPN
         // ============================================================
+
         if (mode == "server") {
             startGateway()
         } else {
@@ -72,6 +77,61 @@ class SpenixVpnService : VpnService() {
         }
 
         return START_NOT_STICKY
+    }
+
+    // ============================================================
+    // DISCONNECT VPN COMPLETELY
+    // ============================================================
+
+    private fun disconnectVpn() {
+
+        Log.d(TAG, "Completely disconnecting Spenix VPN")
+
+        // First close the actual VPN interface.
+        stopVpnInterface()
+
+        // Remove foreground notification.
+        try {
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+
+                stopForeground(
+                    STOP_FOREGROUND_REMOVE
+                )
+
+            } else {
+
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Error removing foreground service",
+                e
+            )
+        }
+
+        // Stop this Android service completely.
+        try {
+
+            stopSelf()
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Error stopping service",
+                e
+            )
+        }
+
+        Log.d(
+            TAG,
+            "Spenix VPN disconnected completely"
+        )
     }
 
     // ============================================================
@@ -107,7 +167,9 @@ class SpenixVpnService : VpnService() {
             channel.description = "Spenix VPN connection"
 
             val manager =
-                getSystemService(NotificationManager::class.java)
+                getSystemService(
+                    NotificationManager::class.java
+                )
 
             manager.createNotificationChannel(channel)
         }
@@ -121,7 +183,10 @@ class SpenixVpnService : VpnService() {
 
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
 
-            Notification.Builder(this, CHANNEL_ID)
+            Notification.Builder(
+                this,
+                CHANNEL_ID
+            )
                 .setContentTitle("Spenix VPN")
                 .setContentText("Spenix VPN is running")
                 .setSmallIcon(android.R.drawable.ic_secure)
@@ -148,17 +213,18 @@ class SpenixVpnService : VpnService() {
 
         try {
 
-            Log.d(TAG, "Starting Spenix VPN client")
+            Log.d(
+                TAG,
+                "Starting Spenix VPN client"
+            )
 
             val builder = Builder()
 
-            // Virtual VPN address
             builder.addAddress(
                 "10.8.0.2",
                 32
             )
 
-            // DNS
             builder.addDnsServer(
                 "1.1.1.1"
             )
@@ -167,7 +233,6 @@ class SpenixVpnService : VpnService() {
                 "8.8.8.8"
             )
 
-            // Route IPv4 traffic through VPN
             builder.addRoute(
                 "0.0.0.0",
                 0
@@ -197,7 +262,7 @@ class SpenixVpnService : VpnService() {
                     "Failed to establish VPN interface"
                 )
 
-                stopSelf()
+                disconnectVpn()
             }
 
         } catch (e: Exception) {
@@ -208,9 +273,7 @@ class SpenixVpnService : VpnService() {
                 e
             )
 
-            stopVpnInterface()
-
-            stopSelf()
+            disconnectVpn()
         }
     }
 
@@ -229,13 +292,11 @@ class SpenixVpnService : VpnService() {
 
             val builder = Builder()
 
-            // Gateway VPN address
             builder.addAddress(
                 "10.8.0.1",
                 24
             )
 
-            // DNS
             builder.addDnsServer(
                 "1.1.1.1"
             )
@@ -244,7 +305,6 @@ class SpenixVpnService : VpnService() {
                 "8.8.8.8"
             )
 
-            // Route IPv4 traffic
             builder.addRoute(
                 "0.0.0.0",
                 0
@@ -274,7 +334,7 @@ class SpenixVpnService : VpnService() {
                     "Failed to establish gateway interface"
                 )
 
-                stopSelf()
+                disconnectVpn()
             }
 
         } catch (e: Exception) {
@@ -285,9 +345,7 @@ class SpenixVpnService : VpnService() {
                 e
             )
 
-            stopVpnInterface()
-
-            stopSelf()
+            disconnectVpn()
         }
     }
 
@@ -297,26 +355,37 @@ class SpenixVpnService : VpnService() {
 
     private fun stopVpnInterface() {
 
-        try {
-
-            vpnInterface?.close()
-
-            Log.d(
-                TAG,
-                "VPN interface closed"
-            )
-
-        } catch (e: Exception) {
-
-            Log.e(
-                TAG,
-                "Error closing VPN interface",
-                e
-            )
-        }
+        val oldInterface = vpnInterface
 
         vpnInterface = null
         isRunning = false
+
+        if (oldInterface != null) {
+
+            try {
+
+                oldInterface.close()
+
+                Log.d(
+                    TAG,
+                    "VPN interface closed successfully"
+                )
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    TAG,
+                    "Error closing VPN interface",
+                    e
+                )
+            }
+        } else {
+
+            Log.d(
+                TAG,
+                "No VPN interface to close"
+            )
+        }
     }
 
     // ============================================================
@@ -331,6 +400,29 @@ class SpenixVpnService : VpnService() {
         )
 
         stopVpnInterface()
+
+        try {
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+
+                stopForeground(
+                    STOP_FOREGROUND_REMOVE
+                )
+
+            } else {
+
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Error stopping foreground on revoke",
+                e
+            )
+        }
 
         stopSelf()
 
@@ -348,18 +440,33 @@ class SpenixVpnService : VpnService() {
             "Spenix VPN service destroyed"
         )
 
+        // VERY IMPORTANT:
+        // Always close the VPN interface when Android destroys
+        // the service.
+
         stopVpnInterface()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        try {
 
-            stopForeground(
-                STOP_FOREGROUND_REMOVE
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+
+                stopForeground(
+                    STOP_FOREGROUND_REMOVE
+                )
+
+            } else {
+
+                @Suppress("DEPRECATION")
+                stopForeground(true)
+            }
+
+        } catch (e: Exception) {
+
+            Log.e(
+                TAG,
+                "Error stopping foreground service",
+                e
             )
-
-        } else {
-
-            @Suppress("DEPRECATION")
-            stopForeground(true)
         }
 
         super.onDestroy()
