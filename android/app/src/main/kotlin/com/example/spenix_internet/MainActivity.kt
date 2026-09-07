@@ -2,8 +2,6 @@ package com.example.spenix_internet
 
 import android.content.Intent
 import android.net.VpnService
-import android.os.Bundle
-import androidx.activity.result.contract.ActivityResultContracts
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -11,18 +9,9 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "spenix_vpn"
+    private val VPN_REQUEST_CODE = 1001
 
-    private var pendingMode = "client"
-
-    private val vpnPermissionLauncher =
-        registerForActivityResult(
-            ActivityResultContracts.StartActivityForResult()
-        ) { result ->
-
-            if (result.resultCode == RESULT_OK) {
-                startVpnService()
-            }
-        }
+    private var pendingMode: String = "client"
 
     override fun configureFlutterEngine(
         flutterEngine: FlutterEngine
@@ -37,35 +26,24 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
 
                 "connect" -> {
-
                     pendingMode = "client"
-
-                    requestVpnPermission()
-
-                    // Tell Flutter the request was accepted.
+                    requestVpnPermissionAndStart()
                     result.success(true)
                 }
 
                 "disconnect" -> {
-
                     stopVpnService()
-
                     result.success(true)
                 }
 
                 "startGateway" -> {
-
                     pendingMode = "server"
-
-                    requestVpnPermission()
-
+                    requestVpnPermissionAndStart()
                     result.success(true)
                 }
 
                 "stopGateway" -> {
-
                     stopVpnService()
-
                     result.success(true)
                 }
 
@@ -76,63 +54,65 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun requestVpnPermission() {
+    private fun requestVpnPermissionAndStart() {
 
-        try {
+        val intent = VpnService.prepare(this)
 
-            val intent = VpnService.prepare(this)
+        if (intent != null) {
 
-            if (intent != null) {
+            startActivityForResult(
+                intent,
+                VPN_REQUEST_CODE
+            )
 
-                vpnPermissionLauncher.launch(intent)
+        } else {
 
-            } else {
-
-                startVpnService()
-            }
-
-        } catch (e: Exception) {
-
-            e.printStackTrace()
+            startVpnService()
         }
     }
 
     private fun startVpnService() {
 
-        try {
+        val intent = Intent(
+            this,
+            SpenixVpnService::class.java
+        )
 
-            val intent = Intent(
-                this,
-                SpenixVpnService::class.java
-            )
+        intent.putExtra(
+            "mode",
+            pendingMode
+        )
 
-            intent.putExtra(
-                "mode",
-                pendingMode
-            )
-
-            startService(intent)
-
-        } catch (e: Exception) {
-
-            e.printStackTrace()
-        }
+        startService(intent)
     }
 
     private fun stopVpnService() {
 
-        try {
+        val intent = Intent(
+            this,
+            SpenixVpnService::class.java
+        )
 
-            val intent = Intent(
-                this,
-                SpenixVpnService::class.java
-            )
+        stopService(intent)
+    }
 
-            stopService(intent)
+    override fun onActivityResult(
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?
+    ) {
 
-        } catch (e: Exception) {
+        super.onActivityResult(
+            requestCode,
+            resultCode,
+            data
+        )
 
-            e.printStackTrace()
+        if (
+            requestCode == VPN_REQUEST_CODE &&
+            resultCode == RESULT_OK
+        ) {
+            startVpnService()
         }
     }
 }
