@@ -3,25 +3,61 @@ package com.example.spenix_internet
 import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
+import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
+import com.wireguard.android.backend.Backend
+import com.wireguard.android.backend.GoBackend
+import com.wireguard.android.backend.Tunnel
+import com.wireguard.config.Config
+
+import java.io.ByteArrayInputStream
+
 class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "spenix_vpn"
+
     private val VPN_REQUEST_CODE = 1001
 
-    private var pendingMode: String = "client"
+    private lateinit var backend: Backend
 
-    // Used to prevent a VPN from starting after
-    // the user has already pressed Disconnect.
-    private var disconnectRequested = false
+    private var pendingConnect = false
+
+    private val wireGuardTunnel = object : Tunnel {
+
+        override fun getName(): String {
+            return "Spenix"
+        }
+
+        override fun onStateChange(
+            newState: Tunnel.State
+        ) {
+
+            Log.d(
+                "SpenixVPN",
+                "WireGuard state: $newState"
+            )
+        }
+    }
+
+    override fun onCreate(
+        savedInstanceState: Bundle?
+    ) {
+
+        super.onCreate(savedInstanceState)
+
+        backend = GoBackend(this)
+    }
 
     override fun configureFlutterEngine(
         flutterEngine: FlutterEngine
     ) {
-        super.configureFlutterEngine(flutterEngine)
+
+        super.configureFlutterEngine(
+            flutterEngine
+        )
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -30,74 +66,33 @@ class MainActivity : FlutterActivity() {
 
             when (call.method) {
 
-                // ====================================================
-                // CONNECT
-                // ====================================================
-
                 "connect" -> {
 
-                    disconnectRequested = false
+                    pendingConnect = true
 
-                    pendingMode = "client"
-
-                    requestVpnPermissionAndStart()
+                    requestVpnPermission()
 
                     result.success(true)
                 }
-
-                // ====================================================
-                // DISCONNECT
-                // ====================================================
 
                 "disconnect" -> {
 
-                    disconnectRequested = true
+                    pendingConnect = false
 
-                    stopVpnService()
-
-                    result.success(true)
-                }
-
-                // ====================================================
-                // START GATEWAY
-                // ====================================================
-
-                "startGateway" -> {
-
-                    disconnectRequested = false
-
-                    pendingMode = "server"
-
-                    requestVpnPermissionAndStart()
-
-                    result.success(true)
-                }
-
-                // ====================================================
-                // STOP GATEWAY
-                // ====================================================
-
-                "stopGateway" -> {
-
-                    disconnectRequested = true
-
-                    stopVpnService()
+                    disconnectWireGuard()
 
                     result.success(true)
                 }
 
                 else -> {
+
                     result.notImplemented()
                 }
             }
         }
     }
 
-    // ================================================================
-    // REQUEST VPN PERMISSION
-    // ================================================================
-
-    private fun requestVpnPermissionAndStart() {
+    private fun requestVpnPermission() {
 
         val intent = VpnService.prepare(this)
 
@@ -110,99 +105,99 @@ class MainActivity : FlutterActivity() {
 
         } else {
 
-            startVpnService()
+            startWireGuard()
         }
     }
 
-    // ================================================================
-    // START VPN SERVICE
-    // ================================================================
+    private fun startWireGuard() {
 
-    private fun startVpnService() {
-
-        // Do not start the VPN if Disconnect was pressed.
-        if (disconnectRequested) {
+        if (!pendingConnect) {
             return
         }
 
-        val intent = Intent(
-            this,
-            SpenixVpnService::class.java
-        )
+        Thread {
 
-        intent.putExtra(
-            "mode",
-            pendingMode
-        )
+            try {
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-
-            startForegroundService(intent)
-
-        } else {
-
-            @Suppress("DEPRECATION")
-            startService(intent)
-        }
-    }
-
-    // ================================================================
-    // STOP VPN SERVICE
-    // ================================================================
-
-    private fun stopVpnService() {
-
-        // First send an explicit disconnect command.
-        val disconnectIntent = Intent(
-            this,
-            SpenixVpnService::class.java
-        )
-
-        disconnectIntent.action =
-            SpenixVpnService.ACTION_DISCONNECT
-
-        disconnectIntent.putExtra(
-            "mode",
-            "disconnect"
-        )
-
-        try {
-
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-
-                startForegroundService(
-                    disconnectIntent
+                Log.d(
+                    "SpenixVPN",
+                    "Starting WireGuard..."
                 )
 
-            } else {
+                val configText = """
+                    [Interface]
+                    PrivateKey = 6M4lNVQajP6/Hjc8Js+Zz71RfON7n/EzRAN2cfEhoHk=
+                    Address = 10.8.0.2/32
+                    DNS = 1.1.1.1
+                    MTU = 1380
 
-                @Suppress("DEPRECATION")
-                startService(
-                    disconnectIntent
+                    [Peer]
+                    PublicKey = 3YnmBNDVFlbWDcBDLuLoU7I2FN+zK0FN4pkfOLZ97X0=
+                    AllowedIPs = 0.0.0.0/0
+                    Endpoint = 172.20.10.6:51820
+                    PersistentKeepalive = 25
+                """.trimIndent()
+
+                val config =
+                    Config.parse(
+                        ByteArrayInputStream(
+                            configText.toByteArray(
+                                Charsets.UTF_8
+                            )
+                        )
+                    )
+
+                backend.setState(
+                    wireGuardTunnel,
+                    Tunnel.State.UP,
+                    config
+                )
+
+                Log.d(
+                    "SpenixVPN",
+                    "WireGuard connected successfully"
+                )
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    "SpenixVPN",
+                    "WireGuard connection failed",
+                    e
                 )
             }
 
-        } catch (e: Exception) {
-
-            // If the service is not running,
-            // make sure Android still stops it.
-        }
-
-        // Also explicitly stop the service.
-        try {
-
-            stopService(
-                disconnectIntent
-            )
-
-        } catch (e: Exception) {
-            // Ignore.
-        }
+        }.start()
     }
 
-    // ================================================================
-    // VPN PERMISSION RESULT
-    // ================================================================
+    private fun disconnectWireGuard() {
+
+        Thread {
+
+            try {
+
+                backend.setState(
+                    wireGuardTunnel,
+                    Tunnel.State.DOWN,
+                    null
+                )
+
+                Log.d(
+                    "SpenixVPN",
+                    "WireGuard disconnected"
+                )
+
+            } catch (e: Exception) {
+
+                Log.e(
+                    "SpenixVPN",
+                    "WireGuard disconnect error",
+                    e
+                )
+            }
+
+        }.start()
+    }
 
     override fun onActivityResult(
         requestCode: Int,
@@ -217,23 +212,20 @@ class MainActivity : FlutterActivity() {
         )
 
         if (
-            requestCode == VPN_REQUEST_CODE &&
-            resultCode == RESULT_OK
+            requestCode == VPN_REQUEST_CODE
         ) {
 
-            // Only start if the user has NOT pressed Disconnect.
-            if (!disconnectRequested) {
-                startVpnService()
+            if (
+                resultCode == RESULT_OK &&
+                pendingConnect
+            ) {
+
+                startWireGuard()
+
+            } else {
+
+                pendingConnect = false
             }
         }
-    }
-
-    // ================================================================
-    // ACTIVITY DESTROYED
-    // ================================================================
-
-    override fun onDestroy() {
-
-        super.onDestroy()
     }
 }
