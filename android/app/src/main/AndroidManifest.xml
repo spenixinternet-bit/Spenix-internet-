@@ -34,15 +34,11 @@
 
         </activity>
 
+        <!-- WireGuard's built-in VPN service -->
         <service
-            android:name=".SpenixVpnService"
+            android:name="com.wireguard.android.backend.GoBackend$VpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
-            android:exported="false"
-            android:foregroundServiceType="specialUse">
-
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Spenix VPN service for maintaining the active VPN connection" />
+            android:exported="false">
 
             <intent-filter>
                 <action android:name="android.net.VpnService" />
