@@ -1,9 +1,13 @@
 package com.example.spenix_internet
 
+import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -55,14 +59,32 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
 
                 "connect" -> {
+
+                    if (!hasInternetConnection()) {
+
+                        Toast.makeText(
+                            this,
+                            "No internet connection. Turn on mobile data or Wi-Fi.",
+                            Toast.LENGTH_LONG
+                        ).show()
+
+                        result.success(false)
+                        return@setMethodCallHandler
+                    }
+
                     pendingConnect = true
+
                     requestVpnPermission()
+
                     result.success(true)
                 }
 
                 "disconnect" -> {
+
                     pendingConnect = false
+
                     disconnectWireGuard()
+
                     result.success(true)
                 }
 
@@ -71,6 +93,28 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+    }
+
+    private fun hasInternetConnection(): Boolean {
+
+        val connectivityManager =
+            getSystemService(Context.CONNECTIVITY_SERVICE)
+                    as ConnectivityManager
+
+        val network =
+            connectivityManager.activeNetwork
+                ?: return false
+
+        val capabilities =
+            connectivityManager.getNetworkCapabilities(network)
+                ?: return false
+
+        return capabilities.hasCapability(
+            NetworkCapabilities.NET_CAPABILITY_INTERNET
+        ) &&
+        capabilities.hasCapability(
+            NetworkCapabilities.NET_CAPABILITY_VALIDATED
+        )
     }
 
     private fun requestVpnPermission() {
@@ -93,6 +137,22 @@ class MainActivity : FlutterActivity() {
     private fun startWireGuard() {
 
         if (!pendingConnect) {
+            return
+        }
+
+        if (!hasInternetConnection()) {
+
+            pendingConnect = false
+
+            runOnUiThread {
+
+                Toast.makeText(
+                    this,
+                    "No internet connection. Spenix VPN cannot connect.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+
             return
         }
 
@@ -135,16 +195,25 @@ class MainActivity : FlutterActivity() {
 
                 Log.d(
                     "SpenixVPN",
-                    "Spenix VPN connected successfully"
+                    "Spenix VPN started"
                 )
 
             } catch (e: Exception) {
 
                 Log.e(
                     "SpenixVPN",
-                    "Spenix VPN connection failed",
+                    "VPN connection failed",
                     e
                 )
+
+                runOnUiThread {
+
+                    Toast.makeText(
+                        this,
+                        "Spenix VPN connection failed.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
 
         }.start()
@@ -195,7 +264,8 @@ class MainActivity : FlutterActivity() {
 
             if (
                 resultCode == RESULT_OK &&
-                pendingConnect
+                pendingConnect &&
+                hasInternetConnection()
             ) {
 
                 startWireGuard()
@@ -203,6 +273,12 @@ class MainActivity : FlutterActivity() {
             } else {
 
                 pendingConnect = false
+
+                Toast.makeText(
+                    this,
+                    "No usable internet connection.",
+                    Toast.LENGTH_LONG
+                ).show()
             }
         }
     }
