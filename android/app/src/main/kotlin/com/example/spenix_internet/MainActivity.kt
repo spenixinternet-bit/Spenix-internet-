@@ -56,17 +56,13 @@ class MainActivity : FlutterActivity() {
 
                 "connect" -> {
                     pendingConnect = true
-
                     requestVpnPermission()
-
                     result.success(true)
                 }
 
                 "disconnect" -> {
                     pendingConnect = false
-
                     disconnectWireGuard()
-
                     result.success(true)
                 }
 
@@ -119,7 +115,7 @@ class MainActivity : FlutterActivity() {
                     [Peer]
                     PublicKey = 3YnmBNDVFlbWDcBDLuLoU7I2FN+zK0FN4pkfOLZ97X0=
                     AllowedIPs = 0.0.0.0/0
-                    Endpoint = 102.86.4.57:51820
+                    Endpoint = spenixvpn.duckdns.org:51820
                     PersistentKeepalive = 25
                 """.trimIndent()
 
@@ -139,7 +135,7 @@ class MainActivity : FlutterActivity() {
 
                 Log.d(
                     "SpenixVPN",
-                    "Spenix VPN connected"
+                    "Spenix VPN connected successfully"
                 )
 
             } catch (e: Exception) {
