@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.VpnService
 import android.os.Bundle
 import android.util.Log
+
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -18,34 +19,24 @@ import java.io.ByteArrayInputStream
 class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "spenix_vpn"
-
     private val VPN_REQUEST_CODE = 1001
 
     private lateinit var backend: Backend
 
     private var pendingConnect = false
 
-    private val wireGuardTunnel = object : Tunnel {
+    private val spenixTunnel = object : Tunnel {
 
         override fun getName(): String {
             return "Spenix"
         }
 
-        override fun onStateChange(
-            newState: Tunnel.State
-        ) {
-
-            Log.d(
-                "SpenixVPN",
-                "WireGuard state: $newState"
-            )
+        override fun onStateChange(newState: Tunnel.State) {
+            Log.d("SpenixVPN", "WireGuard state: $newState")
         }
     }
 
-    override fun onCreate(
-        savedInstanceState: Bundle?
-    ) {
-
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         backend = GoBackend(this)
@@ -54,10 +45,7 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(
         flutterEngine: FlutterEngine
     ) {
-
-        super.configureFlutterEngine(
-            flutterEngine
-        )
+        super.configureFlutterEngine(flutterEngine)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -67,7 +55,6 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
 
                 "connect" -> {
-
                     pendingConnect = true
 
                     requestVpnPermission()
@@ -76,7 +63,6 @@ class MainActivity : FlutterActivity() {
                 }
 
                 "disconnect" -> {
-
                     pendingConnect = false
 
                     disconnectWireGuard()
@@ -85,7 +71,6 @@ class MainActivity : FlutterActivity() {
                 }
 
                 else -> {
-
                     result.notImplemented()
                 }
             }
@@ -121,7 +106,7 @@ class MainActivity : FlutterActivity() {
 
                 Log.d(
                     "SpenixVPN",
-                    "Starting WireGuard..."
+                    "Starting Spenix VPN..."
                 )
 
                 val configText = """
@@ -134,35 +119,34 @@ class MainActivity : FlutterActivity() {
                     [Peer]
                     PublicKey = 3YnmBNDVFlbWDcBDLuLoU7I2FN+zK0FN4pkfOLZ97X0=
                     AllowedIPs = 0.0.0.0/0
-                    Endpoint = 172.20.10.6:51820
+                    Endpoint = 102.86.4.57:51820
                     PersistentKeepalive = 25
                 """.trimIndent()
 
-                val config =
-                    Config.parse(
-                        ByteArrayInputStream(
-                            configText.toByteArray(
-                                Charsets.UTF_8
-                            )
+                val config = Config.parse(
+                    ByteArrayInputStream(
+                        configText.toByteArray(
+                            Charsets.UTF_8
                         )
                     )
+                )
 
                 backend.setState(
-                    wireGuardTunnel,
+                    spenixTunnel,
                     Tunnel.State.UP,
                     config
                 )
 
                 Log.d(
                     "SpenixVPN",
-                    "WireGuard connected successfully"
+                    "Spenix VPN connected"
                 )
 
             } catch (e: Exception) {
 
                 Log.e(
                     "SpenixVPN",
-                    "WireGuard connection failed",
+                    "Spenix VPN connection failed",
                     e
                 )
             }
@@ -177,21 +161,21 @@ class MainActivity : FlutterActivity() {
             try {
 
                 backend.setState(
-                    wireGuardTunnel,
+                    spenixTunnel,
                     Tunnel.State.DOWN,
                     null
                 )
 
                 Log.d(
                     "SpenixVPN",
-                    "WireGuard disconnected"
+                    "Spenix VPN disconnected"
                 )
 
             } catch (e: Exception) {
 
                 Log.e(
                     "SpenixVPN",
-                    "WireGuard disconnect error",
+                    "Disconnect error",
                     e
                 )
             }
@@ -211,9 +195,7 @@ class MainActivity : FlutterActivity() {
             data
         )
 
-        if (
-            requestCode == VPN_REQUEST_CODE
-        ) {
+        if (requestCode == VPN_REQUEST_CODE) {
 
             if (
                 resultCode == RESULT_OK &&
