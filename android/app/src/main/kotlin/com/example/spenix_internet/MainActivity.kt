@@ -1,55 +1,33 @@
 package com.example.spenix_internet
 
-import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Bundle
-import android.util.Log
-import android.widget.Toast
-
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-
-import com.wireguard.android.backend.Backend
 import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
-
-import java.io.ByteArrayInputStream
+import java.io.BufferedReader
+import java.io.StringReader
 
 class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "spenix_vpn"
     private val VPN_REQUEST_CODE = 1001
 
-    private lateinit var backend: Backend
+    private lateinit var backend: GoBackend
 
+    private var tunnel: Tunnel? = null
     private var pendingConnect = false
 
-    private val spenixTunnel = object : Tunnel {
-
-        override fun getName(): String {
-            return "Spenix"
-        }
-
-        override fun onStateChange(newState: Tunnel.State) {
-            Log.d("SpenixVPN", "WireGuard state: $newState")
-        }
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
 
         backend = GoBackend(this)
-    }
-
-    override fun configureFlutterEngine(
-        flutterEngine: FlutterEngine
-    ) {
-        super.configureFlutterEngine(flutterEngine)
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -59,47 +37,73 @@ class MainActivity : FlutterActivity() {
             when (call.method) {
 
                 "connect" -> {
-
-                    if (!hasInternetConnection()) {
-
-                        Toast.makeText(
-                            this,
-                            "No internet connection. Turn on mobile data or Wi-Fi.",
-                            Toast.LENGTH_LONG
-                        ).show()
-
-                        result.success(false)
+                    if (!hasWorkingInternet()) {
+                        result.error(
+                            "NO_INTERNET",
+                            "Mobile data/internet is not available.",
+                            null
+                        )
                         return@setMethodCallHandler
                     }
 
                     pendingConnect = true
 
-                    requestVpnPermission()
+                    val intent = VpnService.prepare(this)
+
+                    if (intent != null) {
+                        startActivityForResult(
+                            intent,
+                            VPN_REQUEST_CODE
+                        )
+                    } else {
+                        startWireGuard(result)
+                    }
 
                     result.success(true)
                 }
 
                 "disconnect" -> {
-
                     pendingConnect = false
 
-                    disconnectWireGuard()
+                    try {
+                        tunnel?.let {
+                            backend.setState(
+                                it,
+                                Tunnel.State.DOWN,
+                                null
+                            )
+                        }
 
-                    result.success(true)
+                        result.success(true)
+
+                    } catch (e: Exception) {
+                        result.error(
+                            "DISCONNECT_ERROR",
+                            e.message,
+                            null
+                        )
+                    }
                 }
 
-                else -> {
-                    result.notImplemented()
+                "startGateway" -> {
+                    result.success(false)
                 }
+
+                "stopGateway" -> {
+                    result.success(false)
+                }
+
+                else -> result.notImplemented()
             }
         }
     }
 
-    private fun hasInternetConnection(): Boolean {
+    private fun hasWorkingInternet(): Boolean {
 
         val connectivityManager =
-            getSystemService(Context.CONNECTIVITY_SERVICE)
-                    as ConnectivityManager
+            getSystemService(
+                ConnectivityManager::class.java
+            )
 
         val network =
             connectivityManager.activeNetwork
@@ -117,135 +121,68 @@ class MainActivity : FlutterActivity() {
         )
     }
 
-    private fun requestVpnPermission() {
+    private fun startWireGuard(
+        result: MethodChannel.Result? = null
+    ) {
 
-        val intent = VpnService.prepare(this)
+        try {
 
-        if (intent != null) {
+            val configText = """
+                [Interface]
+                PrivateKey = 6M4lNVQajP6/Hjc8Js+Zz71RfON7n/EzRAN2cfEhoHk=
+                Address = 10.8.0.2/32
+                DNS = 1.1.1.1
+                MTU = 1380
 
-            startActivityForResult(
-                intent,
-                VPN_REQUEST_CODE
-            )
+                [Peer]
+                PublicKey = 3YnmBNDVFlbWDcBDLuLoU7I2FN+zK0FN4pkfOLZ97X0=
+                AllowedIPs = 0.0.0.0/0
+                Endpoint = spenixvpn.duckdns.org:51820
+                PersistentKeepalive = 25
+            """.trimIndent()
 
-        } else {
-
-            startWireGuard()
-        }
-    }
-
-    private fun startWireGuard() {
-
-        if (!pendingConnect) {
-            return
-        }
-
-        if (!hasInternetConnection()) {
-
-            pendingConnect = false
-
-            runOnUiThread {
-
-                Toast.makeText(
-                    this,
-                    "No internet connection. Spenix VPN cannot connect.",
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-
-            return
-        }
-
-        Thread {
-
-            try {
-
-                Log.d(
-                    "SpenixVPN",
-                    "Starting Spenix VPN..."
-                )
-
-                val configText = """
-                    [Interface]
-                    PrivateKey = 6M4lNVQajP6/Hjc8Js+Zz71RfON7n/EzRAN2cfEhoHk=
-                    Address = 10.8.0.2/32
-                    DNS = 1.1.1.1
-                    MTU = 1380
-
-                    [Peer]
-                    PublicKey = 3YnmBNDVFlbWDcBDLuLoU7I2FN+zK0FN4pkfOLZ97X0=
-                    AllowedIPs = 0.0.0.0/0
-                    Endpoint = spenixvpn.duckdns.org:51820
-                    PersistentKeepalive = 25
-                """.trimIndent()
-
-                val config = Config.parse(
-                    ByteArrayInputStream(
-                        configText.toByteArray(
-                            Charsets.UTF_8
-                        )
+            val config =
+                Config.parse(
+                    BufferedReader(
+                        StringReader(configText)
                     )
                 )
 
-                backend.setState(
-                    spenixTunnel,
-                    Tunnel.State.UP,
-                    config
-                )
+            if (tunnel == null) {
 
-                Log.d(
-                    "SpenixVPN",
-                    "Spenix VPN started"
-                )
+                tunnel = object : Tunnel {
 
-            } catch (e: Exception) {
+                    override fun getName(): String {
+                        return "Spenix"
+                    }
 
-                Log.e(
-                    "SpenixVPN",
-                    "VPN connection failed",
-                    e
-                )
-
-                runOnUiThread {
-
-                    Toast.makeText(
-                        this,
-                        "Spenix VPN connection failed.",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    override fun onStateChange(
+                        newState: Tunnel.State
+                    ) {
+                    }
                 }
             }
 
-        }.start()
-    }
+            backend.setState(
+                tunnel!!,
+                Tunnel.State.UP,
+                config
+            )
 
-    private fun disconnectWireGuard() {
+            pendingConnect = false
 
-        Thread {
+            result?.success(true)
 
-            try {
+        } catch (e: Exception) {
 
-                backend.setState(
-                    spenixTunnel,
-                    Tunnel.State.DOWN,
-                    null
-                )
+            pendingConnect = false
 
-                Log.d(
-                    "SpenixVPN",
-                    "Spenix VPN disconnected"
-                )
-
-            } catch (e: Exception) {
-
-                Log.e(
-                    "SpenixVPN",
-                    "Disconnect error",
-                    e
-                )
-            }
-
-        }.start()
+            result?.error(
+                "VPN_ERROR",
+                e.message,
+                null
+            )
+        }
     }
 
     override fun onActivityResult(
@@ -262,24 +199,31 @@ class MainActivity : FlutterActivity() {
 
         if (requestCode == VPN_REQUEST_CODE) {
 
-            if (
-                resultCode == RESULT_OK &&
-                pendingConnect &&
-                hasInternetConnection()
+            if (resultCode == RESULT_OK &&
+                pendingConnect
             ) {
-
                 startWireGuard()
-
             } else {
-
                 pendingConnect = false
-
-                Toast.makeText(
-                    this,
-                    "No usable internet connection.",
-                    Toast.LENGTH_LONG
-                ).show()
             }
         }
+    }
+
+    override fun onDestroy() {
+
+        try {
+
+            tunnel?.let {
+                backend.setState(
+                    it,
+                    Tunnel.State.DOWN,
+                    null
+                )
+            }
+
+        } catch (_: Exception) {
+        }
+
+        super.onDestroy()
     }
 }
