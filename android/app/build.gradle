@@ -1,68 +1,35 @@
-def localProperties = new Properties()
-def localPropertiesFile = rootProject.file('local.properties')
-
-if (localPropertiesFile.exists()) {
-    localPropertiesFile.withReader('UTF-8') { reader ->
-        localProperties.load(reader)
-    }
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
 }
-
-def flutterRoot = localProperties.getProperty('flutter.sdk')
-
-if (flutterRoot == null) {
-    throw new GradleException(
-        "Flutter SDK not found. Define location with flutter.sdk in local.properties."
-    )
-}
-
-def flutterVersionCode = localProperties.getProperty('flutter.versionCode')
-
-if (flutterVersionCode == null) {
-    flutterVersionCode = '1'
-}
-
-def flutterVersionName = localProperties.getProperty('flutter.versionName')
-
-if (flutterVersionName == null) {
-    flutterVersionName = '1.0'
-}
-
-apply plugin: 'com.android.application'
-apply plugin: 'kotlin-android'
-apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 android {
-    namespace 'com.example.spenix_internet'
+    namespace "com.example.spenix_internet"
 
-    compileSdkVersion 34
+    compileSdk 34
 
-    ndkVersion flutter.ndkVersion
-
-    compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
-
-        coreLibraryDesugaringEnabled true
-    }
-
-    kotlinOptions {
-        jvmTarget = '17'
-    }
-
-    sourceSets {
-        main.java.srcDirs += 'src/main/kotlin'
-    }
+    ndkVersion "25.1.8937393"
 
     defaultConfig {
         applicationId "com.example.spenix_internet"
 
-        minSdkVersion 21
+        minSdk 21
 
-        targetSdkVersion 34
+        targetSdk 34
 
-        versionCode flutterVersionCode.toInteger()
+        versionCode flutter.versionCode.toInteger()
 
-        versionName flutterVersionName
+        versionName flutter.versionName
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
     }
 
     buildTypes {
@@ -73,15 +40,5 @@ android {
 }
 
 flutter {
-    source '../..'
-}
-
-dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
-
-    // WireGuard Android tunnel engine
-    implementation "com.wireguard.android:tunnel:1.0.20230427"
-
-    // Java API desugaring
-    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.0.3"
+    source "../.."
 }
