@@ -19,6 +19,10 @@ class GatewayStatus {
 
   final String message;
 
+  final String gatewayIp;
+  final int wireguardPort;
+  final int apiPort;
+
   GatewayStatus({
     required this.online,
     required this.internetWorking,
@@ -28,6 +32,9 @@ class GatewayStatus {
     required this.recommendation,
     required this.userSpeeds,
     required this.message,
+    this.gatewayIp = '',
+    this.wireguardPort = 51820,
+    this.apiPort = 8080,
   });
 
   factory GatewayStatus.waiting() {
@@ -39,7 +46,7 @@ class GatewayStatus {
       onlineUsers: 0,
       recommendation: 'WAITING FOR GATEWAY',
       userSpeeds: {},
-      message: 'Gateway API is not configured yet.',
+      message: 'Gateway is waiting for connection.',
     );
   }
 
@@ -88,6 +95,18 @@ class GatewayStatus {
       message:
           json['message']?.toString() ??
               'Gateway data received.',
+      gatewayIp:
+          json['gatewayIp']?.toString() ?? '',
+      wireguardPort:
+          int.tryParse(
+                '${json['wireguardPort'] ?? 51820}',
+              ) ??
+              51820,
+      apiPort:
+          int.tryParse(
+                '${json['apiPort'] ?? 8080}',
+              ) ??
+              8080,
     );
   }
 }
@@ -96,23 +115,26 @@ class GatewayService {
   static const String endpointKey =
       'gateway_api_url';
 
+  static const String defaultEndpoint =
+      'http://10.8.0.1:8080';
+
   static const Duration timeout =
       Duration(seconds: 5);
-
-  // ==========================================================
-  // GET SAVED GATEWAY API ADDRESS
-  // ==========================================================
 
   static Future<String> getEndpoint() async {
     final prefs =
         await SharedPreferences.getInstance();
 
-    return prefs.getString(endpointKey) ?? '';
-  }
+    final saved =
+        prefs.getString(endpointKey);
 
-  // ==========================================================
-  // SAVE GATEWAY API ADDRESS
-  // ==========================================================
+    if (saved == null ||
+        saved.trim().isEmpty) {
+      return defaultEndpoint;
+    }
+
+    return saved.trim();
+  }
 
   static Future<void> setEndpoint(
     String endpoint,
@@ -120,15 +142,19 @@ class GatewayService {
     final prefs =
         await SharedPreferences.getInstance();
 
+    final value =
+        endpoint.trim();
+
+    if (value.isEmpty) {
+      await prefs.remove(endpointKey);
+      return;
+    }
+
     await prefs.setString(
       endpointKey,
-      endpoint.trim(),
+      value,
     );
   }
-
-  // ==========================================================
-  // CLEAR GATEWAY API ADDRESS
-  // ==========================================================
 
   static Future<void> clearEndpoint() async {
     final prefs =
@@ -137,22 +163,15 @@ class GatewayService {
     await prefs.remove(endpointKey);
   }
 
-  // ==========================================================
-  // CHECK GATEWAY
-  // ==========================================================
-
   static Future<GatewayStatus> check() async {
     final endpoint =
         await getEndpoint();
 
-    if (endpoint.trim().isEmpty) {
-      return GatewayStatus.waiting();
-    }
-
     try {
-      String url = endpoint.trim();
+      String url =
+          endpoint.trim();
 
-      if (url.endsWith('/')) {
+      while (url.endsWith('/')) {
         url = url.substring(
           0,
           url.length - 1,
@@ -216,10 +235,10 @@ class GatewayService {
         usedMbps: 0,
         onlineUsers: 0,
         recommendation:
-            'CHECK GATEWAY',
+            'GATEWAY OFFLINE',
         userSpeeds: {},
         message:
-            'Gateway did not respond.',
+            'The Spenix gateway did not respond.',
       );
     } catch (e) {
       return GatewayStatus(
@@ -232,7 +251,7 @@ class GatewayService {
             'CHECK CONNECTION',
         userSpeeds: {},
         message:
-            'Unable to reach the gateway.',
+            'Unable to reach the Spenix gateway.',
       );
     }
   }
