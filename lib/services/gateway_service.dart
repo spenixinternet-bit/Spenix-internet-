@@ -58,7 +58,10 @@ class GatewayStatus {
     if (rawSpeeds is Map) {
       rawSpeeds.forEach((key, value) {
         final double speed =
-            double.tryParse(value.toString()) ?? 0.0;
+            double.tryParse(
+                  value.toString(),
+                ) ??
+                0.0;
 
         speeds[key.toString()] = speed;
       });
@@ -90,14 +93,17 @@ class GatewayStatus {
               ) ??
               0,
       recommendation:
-          json['recommendation']?.toString() ??
+          json['recommendation']
+                  ?.toString() ??
               'WAIT',
       userSpeeds: speeds,
       message:
-          json['message']?.toString() ??
+          json['message']
+                  ?.toString() ??
               'No gateway message.',
       gatewayIp:
-          json['gatewayIp']?.toString() ??
+          json['gatewayIp']
+                  ?.toString() ??
               '10.8.0.1',
       wireguardPort:
           int.tryParse(
@@ -108,7 +114,8 @@ class GatewayStatus {
               51820,
       apiPort:
           int.tryParse(
-                json['apiPort']?.toString() ??
+                json['apiPort']
+                        ?.toString() ??
                     '8080',
               ) ??
               8080,
@@ -186,7 +193,8 @@ class GatewayService {
           usedMbps: 0.0,
           onlineUsers: 0,
           recommendation: 'WAIT',
-          userSpeeds: <String, double>{},
+          userSpeeds:
+              <String, double>{},
           message:
               'Gateway returned HTTP ${response.statusCode}.',
           gatewayIp: '10.8.0.1',
@@ -206,7 +214,8 @@ class GatewayService {
           usedMbps: 0.0,
           onlineUsers: 0,
           recommendation: 'WAIT',
-          userSpeeds: <String, double>{},
+          userSpeeds:
+              <String, double>{},
           message:
               'Gateway returned invalid data.',
           gatewayIp: '10.8.0.1',
@@ -220,7 +229,7 @@ class GatewayService {
           decoded,
         ),
       );
-    } catch (e) {
+    } catch (_) {
       return GatewayStatus(
         online: false,
         internetWorking: false,
@@ -228,7 +237,8 @@ class GatewayService {
         usedMbps: 0.0,
         onlineUsers: 0,
         recommendation: 'WAIT',
-        userSpeeds: <String, double>{},
+        userSpeeds:
+            <String, double>{},
         message:
             'Cannot reach Spenix gateway.',
         gatewayIp: '10.8.0.1',
