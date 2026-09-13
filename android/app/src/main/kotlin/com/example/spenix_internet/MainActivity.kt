@@ -237,10 +237,15 @@ class MainActivity : FlutterActivity() {
 
             pendingConnect = false
 
+            val errorMessage =
+                e.javaClass.simpleName +
+                ": " +
+                (e.message
+                    ?: "Unknown WireGuard error")
+
             pendingConnectResult?.error(
                 "VPN_ERROR",
-                e.message
-                    ?: "Could not start WireGuard.",
+                errorMessage,
                 null
             )
 
