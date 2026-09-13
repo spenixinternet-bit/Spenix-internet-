@@ -1,11 +1,10 @@
 // ============================================================
-// SPENIX INTERNET - COMPLETE MAIN.DART
-// GATEWAY CONTROL CENTER VERSION
+// SPENIX INTERNET
+// COMPLETE MAIN.DART
 // ============================================================
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,141 +16,134 @@ import 'services/vpn_service.dart';
 import 'services/gateway_service.dart';
 
 // ============================================================
-// MAIN
-// ============================================================
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-  ]);
-
-  runApp(const SpenixApp());
-}
-
-// ============================================================
-// COLORS
-// ============================================================
-
-const Color spenixCyan = Color(0xFF00E5FF);
-const Color spenixDark = Color(0xFF050A10);
-const Color spenixCard = Color(0xFF0D1620);
-const Color spenixGreen = Color(0xFF00E676);
-const Color spenixRed = Color(0xFFFF5252);
-const Color spenixOrange = Color(0xFFFFAB00);
-
-// ============================================================
-// PHONE HELPERS
-// ============================================================
-
-String normalizeUgandaPhone(String input) {
-  String phone =
-      input.trim().replaceAll(RegExp(r'\s+'), '');
-
-  if (phone.startsWith('+256')) {
-    phone = '0${phone.substring(4)}';
-  } else if (phone.startsWith('256')) {
-    phone = '0${phone.substring(3)}';
-  }
-
-  return phone;
-}
-
-bool isValidUgandaPhone(String phone) {
-  return RegExp(r'^0[0-9]{9}$').hasMatch(phone);
-}
-
-// ============================================================
-// SECURE VOUCHER GENERATOR
-// ============================================================
-
-String generateSecureVoucherCode() {
-  const chars =
-      'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-
-  final random = Random.secure();
-
-  final code = List.generate(
-    16,
-    (_) => chars[random.nextInt(chars.length)],
-  ).join();
-
-  return 'SPX-$code';
-}
-
-// ============================================================
 // DATABASE
 // ============================================================
 
 class DB {
-  static final DB _instance = DB._internal();
+  static late SharedPreferences prefs;
 
-  factory DB() => _instance;
+  static const String usersKey = 'users';
+  static const String packagesKey = 'packages';
+  static const String subscriptionsKey = 'subscriptions';
+  static const String vouchersKey = 'vouchers';
+  static const String paymentsKey = 'payments';
 
-  DB._internal();
+  static Future<void> init() async {
+    prefs = await SharedPreferences.getInstance();
 
-  SharedPreferences? _prefs;
+    if (!prefs.containsKey(usersKey)) {
+      await saveUsers([
+        {
+          'id': 'admin-001',
+          'name': 'Administrator',
+          'phone': '0771208144',
+          'password': 'Admin@2024',
+          'role': 'admin',
+        },
+        {
+          'id': 'user-001',
+          'name': 'Test User',
+          'phone': '0700000001',
+          'password': 'User@2024',
+          'role': 'user',
+        },
+      ]);
+    }
 
-  Future<void> init() async {
-    _prefs ??=
-        await SharedPreferences.getInstance();
+    if (!prefs.containsKey(packagesKey)) {
+      await savePackages([
+        {
+          'id': 'daily',
+          'name': 'Daily',
+          'price': 0,
+          'days': 1,
+        },
+        {
+          'id': 'weekly',
+          'name': 'Weekly',
+          'price': 0,
+          'days': 7,
+        },
+        {
+          'id': 'monthly',
+          'name': 'Monthly',
+          'price': 0,
+          'days': 30,
+        },
+      ]);
+    }
 
-    await _seed();
+    if (!prefs.containsKey(subscriptionsKey)) {
+      await prefs.setString(subscriptionsKey, jsonEncode([]));
+    }
+
+    if (!prefs.containsKey(vouchersKey)) {
+      await prefs.setString(vouchersKey, jsonEncode([]));
+    }
+
+    if (!prefs.containsKey(paymentsKey)) {
+      await prefs.setString(paymentsKey, jsonEncode([]));
+    }
   }
 
-  SharedPreferences get prefs => _prefs!;
+  static List<Map<String, dynamic>> _readList(String key) {
+    final String? value = prefs.getString(key);
 
-  // ==========================================================
-  // USERS
-  // ==========================================================
+    if (value == null || value.isEmpty) {
+      return [];
+    }
 
-  Future<List<Map<String, dynamic>>> getUsers() async {
-    final data = prefs.getString('users');
+    final dynamic decoded = jsonDecode(value);
 
-    if (data == null) return [];
-
-    final List decoded = jsonDecode(data);
+    if (decoded is! List) {
+      return [];
+    }
 
     return decoded
-        .map(
-          (e) => Map<String, dynamic>.from(e),
+        .map<Map<String, dynamic>>(
+          (item) => Map<String, dynamic>.from(item),
         )
         .toList();
   }
 
-  Future<void> saveUsers(
-    List<Map<String, dynamic>> users,
+  static Future<void> _writeList(
+    String key,
+    List<Map<String, dynamic>> data,
   ) async {
-    await prefs.setString(
-      'users',
-      jsonEncode(users),
-    );
+    await prefs.setString(key, jsonEncode(data));
   }
 
-  Future<void> addUser(
+  // ----------------------------------------------------------
+  // USERS
+  // ----------------------------------------------------------
+
+  static List<Map<String, dynamic>> getUsers() {
+    return _readList(usersKey);
+  }
+
+  static Future<void> saveUsers(
+    List<Map<String, dynamic>> users,
+  ) async {
+    await _writeList(usersKey, users);
+  }
+
+  static Future<void> addUser(
     Map<String, dynamic> user,
   ) async {
-    final users = await getUsers();
-
+    final users = getUsers();
     users.add(user);
-
     await saveUsers(users);
   }
 
-  Future<Map<String, dynamic>?> getUserByPhone(
+  static Map<String, dynamic>? login(
     String phone,
-  ) async {
-    final users = await getUsers();
-
-    final normalized =
-        normalizeUgandaPhone(phone);
+    String password,
+  ) {
+    final users = getUsers();
 
     for (final user in users) {
-      if (normalizeUgandaPhone(
-            user['phone'] ?? '',
-          ) ==
-          normalized) {
+      if (user['phone'] == phone &&
+          user['password'] == password) {
         return user;
       }
     }
@@ -159,253 +151,127 @@ class DB {
     return null;
   }
 
-  Future<Map<String, dynamic>?> login(
-    String phone,
-    String password,
-  ) async {
-    final user =
-        await getUserByPhone(phone);
-
-    if (user == null) return null;
-
-    if (user['password'] != password) {
-      return null;
-    }
-
-    if (user['active'] == false) {
-      return null;
-    }
-
-    await prefs.setString(
-      'user',
-      jsonEncode(user),
-    );
-
-    return user;
-  }
-
-  Future<Map<String, dynamic>?> getCurrentUser() async {
-    final data =
-        prefs.getString('user');
-
-    if (data == null) return null;
-
-    return Map<String, dynamic>.from(
-      jsonDecode(data),
-    );
-  }
-
-  Future<void> logout() async {
-    await prefs.remove('user');
-  }
-
-  Future<bool> updateUser(
-    String userId,
-    Map<String, dynamic> changes,
-  ) async {
-    final users = await getUsers();
-
-    final index = users.indexWhere(
-      (u) => u['id'] == userId,
-    );
-
-    if (index == -1) return false;
-
-    users[index] = {
-      ...users[index],
-      ...changes,
-    };
-
-    await saveUsers(users);
-
-    final current =
-        await getCurrentUser();
-
-    if (current != null &&
-        current['id'] == userId) {
-      await prefs.setString(
-        'user',
-        jsonEncode(users[index]),
-      );
-    }
-
-    return true;
-  }
-
-  // ==========================================================
+  // ----------------------------------------------------------
   // PACKAGES
-  // ==========================================================
+  // ----------------------------------------------------------
 
-  Future<List<Map<String, dynamic>>> getPackages() async {
-    final data =
-        prefs.getString('packages');
-
-    if (data == null) return [];
-
-    final List decoded =
-        jsonDecode(data);
-
-    return decoded
-        .map(
-          (e) => Map<String, dynamic>.from(e),
-        )
-        .toList();
+  static List<Map<String, dynamic>> getPackages() {
+    return _readList(packagesKey);
   }
 
-  Future<void> savePackages(
+  static Future<void> savePackages(
     List<Map<String, dynamic>> packages,
   ) async {
-    await prefs.setString(
-      'packages',
-      jsonEncode(packages),
-    );
+    await _writeList(packagesKey, packages);
   }
 
-  Future<void> addPackage(
+  static Future<void> addPackage(
     Map<String, dynamic> package,
   ) async {
-    final packages =
-        await getPackages();
-
+    final packages = getPackages();
     packages.add(package);
-
     await savePackages(packages);
   }
 
-  Future<void> deletePackage(
+  static Future<void> deletePackage(
     String id,
   ) async {
-    final packages =
-        await getPackages();
+    final packages = getPackages();
 
     packages.removeWhere(
-      (p) => p['id'] == id,
+      (package) => package['id'] == id,
     );
 
     await savePackages(packages);
   }
 
-  // ==========================================================
+  // ----------------------------------------------------------
   // SUBSCRIPTIONS
-  // ==========================================================
+  // ----------------------------------------------------------
 
-  Future<List<Map<String, dynamic>>>
-      getSubscriptions() async {
-    final data =
-        prefs.getString('subscriptions');
-
-    if (data == null) return [];
-
-    final List decoded =
-        jsonDecode(data);
-
-    return decoded
-        .map(
-          (e) => Map<String, dynamic>.from(e),
-        )
-        .toList();
+  static List<Map<String, dynamic>> getSubscriptions() {
+    return _readList(subscriptionsKey);
   }
 
-  Future<void> saveSubscriptions(
+  static Future<void> saveSubscriptions(
     List<Map<String, dynamic>> subscriptions,
   ) async {
-    await prefs.setString(
-      'subscriptions',
-      jsonEncode(subscriptions),
-    );
-  }
-
-  Future<void> addSubscription(
-    Map<String, dynamic> subscription,
-  ) async {
-    final subscriptions =
-        await getSubscriptions();
-
-    subscriptions.add(subscription);
-
-    await saveSubscriptions(
+    await _writeList(
+      subscriptionsKey,
       subscriptions,
     );
   }
 
-  Future<Map<String, dynamic>?>
-      getActiveSubscription() async {
-    final user =
-        await getCurrentUser();
+  static Future<void> addSubscription(
+    Map<String, dynamic> subscription,
+  ) async {
+    final subscriptions = getSubscriptions();
 
-    if (user == null) return null;
+    subscriptions.add(subscription);
 
-    final subscriptions =
-        await getSubscriptions();
+    await saveSubscriptions(subscriptions);
+  }
+
+  static Map<String, dynamic>? getActiveSubscription(
+    String userId,
+  ) {
+    final subscriptions = getSubscriptions();
 
     final now = DateTime.now();
 
-    for (final sub
-        in subscriptions.reversed) {
-      if (sub['userId'] !=
-          user['id']) {
+    for (final subscription in subscriptions.reversed) {
+      if (subscription['userId'] != userId) {
         continue;
       }
 
       final expiry =
           DateTime.tryParse(
-        sub['expiresAt'] ?? '',
+        subscription['expiresAt']?.toString() ?? '',
       );
 
       if (expiry != null &&
           expiry.isAfter(now)) {
-        return sub;
+        return subscription;
       }
     }
 
     return null;
   }
 
-  // ==========================================================
+  // ----------------------------------------------------------
   // VOUCHERS
-  // ==========================================================
+  // ----------------------------------------------------------
 
-  Future<List<Map<String, dynamic>>>
-      getVouchers() async {
-    final data =
-        prefs.getString('vouchers');
-
-    if (data == null) return [];
-
-    final List decoded =
-        jsonDecode(data);
-
-    return decoded
-        .map(
-          (e) => Map<String, dynamic>.from(e),
-        )
-        .toList();
+  static List<Map<String, dynamic>> getVouchers() {
+    return _readList(vouchersKey);
   }
 
-  Future<void> saveVouchers(
+  static Future<void> saveVouchers(
     List<Map<String, dynamic>> vouchers,
   ) async {
-    await prefs.setString(
-      'vouchers',
-      jsonEncode(vouchers),
-    );
+    await _writeList(vouchersKey, vouchers);
   }
 
-  Future<Map<String, dynamic>?>
-      getVoucherByCode(
-    String code,
+  static Future<void> addVoucher(
+    Map<String, dynamic> voucher,
   ) async {
-    final vouchers =
-        await getVouchers();
+    final vouchers = getVouchers();
 
-    final normalized =
-        code.trim().toUpperCase();
+    vouchers.add(voucher);
+
+    await saveVouchers(vouchers);
+  }
+
+  static Map<String, dynamic>? getVoucher(
+    String code,
+  ) {
+    final vouchers = getVouchers();
 
     for (final voucher in vouchers) {
-      if ((voucher['code'] ?? '')
-              .toString()
+      if (voucher['code']
+              ?.toString()
               .toUpperCase() ==
-          normalized) {
+          code.toUpperCase()) {
         return voucher;
       }
     }
@@ -413,144 +279,99 @@ class DB {
     return null;
   }
 
-  Future<bool> useVoucher(
+  static Future<bool> useVoucher(
     String code,
+    String userId,
   ) async {
-    final vouchers =
-        await getVouchers();
+    final vouchers = getVouchers();
 
-    final normalized =
-        code.trim().toUpperCase();
+    for (final voucher in vouchers) {
+      if (voucher['code']
+              ?.toString()
+              .toUpperCase() ==
+          code.toUpperCase()) {
+        if (voucher['used'] == true) {
+          return false;
+        }
 
-    final index =
-        vouchers.indexWhere(
-      (v) =>
-          (v['code'] ?? '')
-                  .toString()
-                  .toUpperCase() ==
-              normalized &&
-          v['used'] != true,
-    );
+        voucher['used'] = true;
+        voucher['usedBy'] = userId;
+        voucher['usedAt'] =
+            DateTime.now().toIso8601String();
 
-    if (index == -1) return false;
+        await saveVouchers(vouchers);
 
-    vouchers[index]['used'] = true;
-
-    vouchers[index]['usedAt'] =
-        DateTime.now()
-            .toIso8601String();
-
-    final user =
-        await getCurrentUser();
-
-    if (user != null) {
-      vouchers[index]['usedBy'] =
-          user['id'];
+        return true;
+      }
     }
 
-    await saveVouchers(vouchers);
-
-    return true;
+    return false;
   }
 
-  // ==========================================================
+  // ----------------------------------------------------------
   // PAYMENTS
-  // ==========================================================
+  // ----------------------------------------------------------
 
-  Future<List<Map<String, dynamic>>>
-      getPayments() async {
-    final data =
-        prefs.getString('payments');
-
-    if (data == null) return [];
-
-    final List decoded =
-        jsonDecode(data);
-
-    return decoded
-        .map(
-          (e) => Map<String, dynamic>.from(e),
-        )
-        .toList();
+  static List<Map<String, dynamic>> getPayments() {
+    return _readList(paymentsKey);
   }
 
-  Future<void> addPayment(
+  static Future<void> savePayments(
+    List<Map<String, dynamic>> payments,
+  ) async {
+    await _writeList(paymentsKey, payments);
+  }
+
+  static Future<void> addPayment(
     Map<String, dynamic> payment,
   ) async {
-    final payments =
-        await getPayments();
+    final payments = getPayments();
 
     payments.add(payment);
 
-    await prefs.setString(
-      'payments',
-      jsonEncode(payments),
-    );
+    await savePayments(payments);
   }
+}
 
-  // ==========================================================
-  // SEED
-  // ==========================================================
+// ============================================================
+// SESSION
+// ============================================================
 
-  Future<void> _seed() async {
-    final users =
-        await getUsers();
+class Session {
+  static Map<String, dynamic>? currentUser;
 
-    if (users.isEmpty) {
-      await saveUsers([
-        {
-          'id': 'admin_1',
-          'name': 'Admin',
-          'phone': '0771208144',
-          'password': 'Admin@2024',
-          'role': 'admin',
-          'active': true,
-          'createdAt':
-              DateTime.now()
-                  .toIso8601String(),
-        },
-        {
-          'id': 'user_1',
-          'name': 'Test User',
-          'phone': '0700000001',
-          'password': 'User@2024',
-          'role': 'user',
-          'active': true,
-          'createdAt':
-              DateTime.now()
-                  .toIso8601String(),
-        },
-      ]);
-    }
+  static bool get loggedIn =>
+      currentUser != null;
 
-    final packages =
-        await getPackages();
+  static bool get isAdmin =>
+      currentUser?['role'] == 'admin';
 
-    if (packages.isEmpty) {
-      await savePackages([
-        {
-          'id': const Uuid().v4(),
-          'name': 'Daily Plan',
-          'durationDays': 1,
-          'price': 0,
-        },
-        {
-          'id': const Uuid().v4(),
-          'name': 'Weekly Plan',
-          'durationDays': 7,
-          'price': 0,
-        },
-        {
-          'id': const Uuid().v4(),
-          'name': 'Monthly Plan',
-          'durationDays': 30,
-          'price': 0,
-        },
-      ]);
-    }
+  static String get userId =>
+      currentUser?['id']?.toString() ?? '';
 
-    // No automatic vouchers.
+  static String get phone =>
+      currentUser?['phone']?.toString() ?? '';
+
+  static String get name =>
+      currentUser?['name']?.toString() ?? 'User';
+
+  static void logout() {
+    currentUser = null;
   }
+}
+
+// ============================================================
+// MAIN
+// ============================================================
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await DB.init();
+
+  runApp(
+    const SpenixApp(),
+  );
 }
 
 // ============================================================
@@ -569,52 +390,12 @@ class SpenixApp extends StatelessWidget {
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor:
-            spenixDark,
-
-        colorScheme:
-            ColorScheme.fromSeed(
-          seedColor: spenixCyan,
-          brightness:
-              Brightness.dark,
+            const Color(0xFF061316),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.cyan,
+          brightness: Brightness.dark,
         ),
-
-        inputDecorationTheme:
-            InputDecorationTheme(
-          filled: true,
-          fillColor: spenixCard,
-          border:
-              OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(
-              14,
-            ),
-            borderSide:
-                BorderSide.none,
-          ),
-        ),
-
-        elevatedButtonTheme:
-            ElevatedButtonThemeData(
-          style:
-              ElevatedButton.styleFrom(
-            backgroundColor:
-                spenixCyan,
-            foregroundColor:
-                Colors.black,
-            minimumSize:
-                const Size(
-              double.infinity,
-              52,
-            ),
-            shape:
-                RoundedRectangleBorder(
-              borderRadius:
-                  BorderRadius.circular(
-                14,
-              ),
-            ),
-          ),
-        ),
+        useMaterial3: true,
       ),
 
       initialRoute: '/splash',
@@ -622,68 +403,55 @@ class SpenixApp extends StatelessWidget {
       getPages: [
         GetPage(
           name: '/splash',
-          page: () =>
-              const SplashScreen(),
+          page: () => const SplashScreen(),
         ),
         GetPage(
           name: '/login',
-          page: () =>
-              const LoginScreen(),
+          page: () => const LoginScreen(),
         ),
         GetPage(
           name: '/register',
-          page: () =>
-              const RegisterScreen(),
+          page: () => const RegisterScreen(),
         ),
         GetPage(
           name: '/home',
-          page: () =>
-              const HomeScreen(),
+          page: () => const HomeScreen(),
         ),
         GetPage(
           name: '/packages',
-          page: () =>
-              const PackagesScreen(),
+          page: () => const PackagesScreen(),
         ),
         GetPage(
           name: '/voucher',
-          page: () =>
-              const VoucherScreen(),
+          page: () => const VoucherScreen(),
         ),
         GetPage(
           name: '/account',
-          page: () =>
-              const AccountScreen(),
+          page: () => const AccountScreen(),
         ),
         GetPage(
           name: '/admin',
-          page: () =>
-              const AdminDashboard(),
+          page: () => const AdminDashboard(),
         ),
         GetPage(
           name: '/admin/users',
-          page: () =>
-              const AdminUsersScreen(),
+          page: () => const AdminUsersScreen(),
         ),
         GetPage(
           name: '/admin/packages',
-          page: () =>
-              const AdminPackagesScreen(),
+          page: () => const AdminPackagesScreen(),
         ),
         GetPage(
           name: '/admin/payments',
-          page: () =>
-              const AdminPaymentsScreen(),
+          page: () => const AdminPaymentsScreen(),
         ),
         GetPage(
           name: '/admin/vouchers',
-          page: () =>
-              const AdminVouchersScreen(),
+          page: () => const AdminVouchersScreen(),
         ),
         GetPage(
           name: '/admin/settings',
-          page: () =>
-              const AdminSettingsScreen(),
+          page: () => const AdminSettingsScreen(),
         ),
       ],
     );
@@ -691,84 +459,138 @@ class SpenixApp extends StatelessWidget {
 }
 
 // ============================================================
-// COMMON APP BAR
+// COMMON UI
 // ============================================================
 
-AppBar spenixAppBar(
-  String title, {
-  List<Widget>? actions,
-}) {
-  return AppBar(
-    title: Text(
-      title,
-      style: const TextStyle(
-        fontWeight:
-            FontWeight.bold,
+class SpenixLogo extends StatelessWidget {
+  final double size;
+
+  const SpenixLogo({
+    super.key,
+    this.size = 80,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.cyan,
+          width: 3,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.cyan.withOpacity(.25),
+            blurRadius: 20,
+          ),
+        ],
       ),
-    ),
-    backgroundColor:
-        spenixDark,
-    foregroundColor:
-        Colors.white,
-    actions: actions,
-  );
+      child: Icon(
+        Icons.wifi,
+        size: size * .55,
+        color: Colors.cyan,
+      ),
+    );
+  }
 }
 
-// ============================================================
-// PHONE FIELD
-// ============================================================
+class SpenixScaffold extends StatelessWidget {
+  final String title;
+  final Widget body;
+  final List<Widget>? actions;
 
-Widget ugandaPhoneField(
-  TextEditingController controller, {
-  String label =
-      'Phone Number',
-}) {
-  return TextField(
-    controller: controller,
-    keyboardType:
-        TextInputType.phone,
-    inputFormatters: [
-      FilteringTextInputFormatter
-          .digitsOnly,
-      LengthLimitingTextInputFormatter(
-        10,
-      ),
-    ],
-    decoration:
-        InputDecoration(
-      labelText: label,
-      hintText:
-          '07XXXXXXXX',
-      prefixIcon:
-          const Padding(
-        padding:
-            EdgeInsets.all(12),
-        child: Text(
-          '🇺🇬',
-          style:
-              TextStyle(
-            fontSize: 23,
+  const SpenixScaffold({
+    super.key,
+    required this.title,
+    required this.body,
+    this.actions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
           ),
         ),
+        actions: actions,
       ),
-    ),
-  );
+      body: body,
+    );
+  }
+}
+
+class InfoCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final IconData icon;
+
+  const InfoCard({
+    super.key,
+    required this.title,
+    required this.value,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: const Color(0xFF0B2025),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              color: Colors.cyan,
+              size: 30,
+            ),
+            const SizedBox(width: 15),
+            Expanded(
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white60,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ============================================================
 // SPLASH
 // ============================================================
 
-class SplashScreen
-    extends StatefulWidget {
-  const SplashScreen({
-    super.key,
-  });
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
 
   @override
-  State<SplashScreen>
-      createState() =>
-          _SplashScreenState();
+  State<SplashScreen> createState() =>
+      _SplashScreenState();
 }
 
 class _SplashScreenState
@@ -776,108 +598,44 @@ class _SplashScreenState
   @override
   void initState() {
     super.initState();
-    start();
-  }
 
-  Future<void> start() async {
-    final db = DB();
-
-    await db.init();
-
-    await Future.delayed(
-      const Duration(
-        seconds: 2,
-      ),
+    Future.delayed(
+      const Duration(seconds: 2),
+      () {
+        Get.offAllNamed('/login');
+      },
     );
-
-    final user =
-        await db.getCurrentUser();
-
-    if (!mounted) return;
-
-    if (user != null) {
-      if (user['role'] ==
-          'admin') {
-        Get.offAllNamed(
-          '/admin',
-        );
-      } else {
-        Get.offAllNamed(
-          '/home',
-        );
-      }
-    } else {
-      Get.offAllNamed(
-        '/login',
-      );
-    }
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
         child: Column(
           mainAxisAlignment:
-              MainAxisAlignment
-                  .center,
+              MainAxisAlignment.center,
           children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration:
-                  BoxDecoration(
-                shape:
-                    BoxShape.circle,
-                border:
-                    Border.all(
-                  color:
-                      spenixCyan,
-                  width: 3,
-                ),
-              ),
-              child:
-                  const Icon(
-                Icons.wifi,
-                size: 55,
-                color:
-                    spenixCyan,
-              ),
-            ),
-            const SizedBox(
-              height: 25,
-            ),
+            const SpenixLogo(size: 100),
+            const SizedBox(height: 25),
             const Text(
               'SPENIX',
-              style:
-                  TextStyle(
-                fontSize: 32,
-                fontWeight:
-                    FontWeight
-                        .bold,
-                color:
-                    spenixCyan,
+              style: TextStyle(
+                fontSize: 38,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 5,
+                color: Colors.cyan,
               ),
             ),
-            const SizedBox(
-              height: 8,
-            ),
+            const SizedBox(height: 8),
             const Text(
-              'INTERNET',
-              style:
-                  TextStyle(
-                letterSpacing:
-                    4,
+              'Fast • Stable • Unlimited',
+              style: TextStyle(
+                color: Colors.white70,
               ),
             ),
-            const SizedBox(
-              height: 30,
-            ),
+            const SizedBox(height: 35),
             const CircularProgressIndicator(
-              color:
-                  spenixCyan,
+              color: Colors.cyan,
             ),
           ],
         ),
@@ -890,61 +648,37 @@ class _SplashScreenState
 // LOGIN
 // ============================================================
 
-class LoginScreen
-    extends StatefulWidget {
-  const LoginScreen({
-    super.key,
-  });
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
 
   @override
-  State<LoginScreen>
-      createState() =>
-          _LoginScreenState();
+  State<LoginScreen> createState() =>
+      _LoginScreenState();
 }
 
 class _LoginScreenState
     extends State<LoginScreen> {
-  final phone =
+  final phoneController =
       TextEditingController();
 
-  final password =
+  final passwordController =
       TextEditingController();
 
   bool loading = false;
   bool hidePassword = true;
 
-  final db = DB();
+  Future<void> login() async {
+    final phone =
+        phoneController.text.trim();
 
-  @override
-  void initState() {
-    super.initState();
-    db.init();
-  }
+    final password =
+        passwordController.text;
 
-  Future<void> doLogin() async {
-    final normalized =
-        normalizeUgandaPhone(
-      phone.text,
-    );
-
-    if (!isValidUgandaPhone(
-      normalized,
-    )) {
+    if (phone.isEmpty ||
+        password.isEmpty) {
       Get.snackbar(
-        'Invalid Phone',
-        'Enter a valid 10-digit Uganda phone number.',
-        snackPosition:
-            SnackPosition.BOTTOM,
-      );
-      return;
-    }
-
-    if (password.text.isEmpty) {
-      Get.snackbar(
-        'Missing Password',
-        'Enter your password.',
-        snackPosition:
-            SnackPosition.BOTTOM,
+        'Login',
+        'Enter phone number and password.',
       );
       return;
     }
@@ -953,15 +687,12 @@ class _LoginScreenState
       loading = true;
     });
 
-    await db.init();
-
-    final user =
-        await db.login(
-      normalized,
-      password.text,
+    await Future.delayed(
+      const Duration(milliseconds: 300),
     );
 
-    if (!mounted) return;
+    final user =
+        DB.login(phone, password);
 
     setState(() {
       loading = false;
@@ -969,165 +700,122 @@ class _LoginScreenState
 
     if (user == null) {
       Get.snackbar(
-        'Login Failed',
-        'Phone number or password is incorrect.',
-        snackPosition:
-            SnackPosition.BOTTOM,
+        'Login failed',
+        'Wrong phone number or password.',
       );
       return;
     }
 
-    if (user['role'] ==
-        'admin') {
-      Get.offAllNamed(
-        '/admin',
-      );
+    Session.currentUser = user;
+
+    if (user['role'] == 'admin') {
+      Get.offAllNamed('/admin');
     } else {
-      Get.offAllNamed(
-        '/home',
-      );
+      Get.offAllNamed('/home');
     }
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child:
-            SingleChildScrollView(
-          padding:
-              const EdgeInsets.all(
-            24,
-          ),
-          child: Column(
-            children: [
-              const SizedBox(
-                height: 50,
-              ),
-              const Icon(
-                Icons.wifi,
-                color:
-                    spenixCyan,
-                size: 80,
-              ),
-              const SizedBox(
-                height: 20,
-              ),
-              const Text(
-                'Welcome to Spenix',
-                style:
-                    TextStyle(
-                  fontSize: 28,
-                  fontWeight:
-                      FontWeight
-                          .bold,
-                ),
-              ),
-              const SizedBox(
-                height: 8,
-              ),
-              const Text(
-                'Connect to the Spenix Internet',
-                style:
-                    TextStyle(
-                  color:
-                      Colors.white60,
-                ),
-              ),
-              const SizedBox(
-                height: 40,
-              ),
-              ugandaPhoneField(
-                phone,
-              ),
-              const SizedBox(
-                height: 15,
-              ),
-              TextField(
-                controller:
-                    password,
-                obscureText:
-                    hidePassword,
-                decoration:
-                    InputDecoration(
-                  labelText:
-                      'Password',
-                  prefixIcon:
-                      const Icon(
-                    Icons.lock,
-                    color:
-                        spenixCyan,
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                const SpenixLogo(size: 90),
+                const SizedBox(height: 20),
+                const Text(
+                  'SPENIX INTERNET',
+                  style: TextStyle(
+                    fontSize: 27,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.cyan,
                   ),
-                  suffixIcon:
-                      IconButton(
-                    icon: Icon(
-                      hidePassword
-                          ? Icons
-                              .visibility
-                          : Icons
-                              .visibility_off,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Login to your account',
+                ),
+                const SizedBox(height: 35),
+
+                TextField(
+                  controller: phoneController,
+                  keyboardType:
+                      TextInputType.phone,
+                  decoration:
+                      const InputDecoration(
+                    labelText: 'Phone number',
+                    prefixIcon:
+                        Icon(Icons.phone),
+                    border:
+                        OutlineInputBorder(),
+                  ),
+                ),
+
+                const SizedBox(height: 15),
+
+                TextField(
+                  controller:
+                      passwordController,
+                  obscureText: hidePassword,
+                  decoration:
+                      InputDecoration(
+                    labelText: 'Password',
+                    prefixIcon:
+                        const Icon(Icons.lock),
+                    suffixIcon: IconButton(
+                      onPressed: () {
+                        setState(() {
+                          hidePassword =
+                              !hidePassword;
+                        });
+                      },
+                      icon: Icon(
+                        hidePassword
+                            ? Icons.visibility
+                            : Icons
+                                .visibility_off,
+                      ),
                     ),
-                    onPressed:
-                        () {
-                      setState(() {
-                        hidePassword =
-                            !hidePassword;
-                      });
-                    },
+                    border:
+                        const OutlineInputBorder(),
                   ),
                 ),
-              ),
-              const SizedBox(
-                height: 25,
-              ),
-              ElevatedButton(
-                onPressed:
-                    loading
-                        ? null
-                        : doLogin,
-                child:
-                    loading
-                        ? const SizedBox(
-                            width: 24,
-                            height:
-                                24,
-                            child:
-                                CircularProgressIndicator(
-                              color:
-                                  Colors.black,
-                            ),
-                          )
+
+                const SizedBox(height: 20),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: FilledButton(
+                    onPressed:
+                        loading ? null : login,
+                    child: loading
+                        ? const CircularProgressIndicator()
                         : const Text(
                             'LOGIN',
-                            style:
-                                TextStyle(
+                            style: TextStyle(
                               fontWeight:
                                   FontWeight.bold,
                             ),
                           ),
-              ),
-              const SizedBox(
-                height: 20,
-              ),
-              TextButton(
-                onPressed: () {
-                  Get.toNamed(
-                    '/register',
-                  );
-                },
-                child:
-                    const Text(
-                  'Create New Account',
-                  style:
-                      TextStyle(
-                    color:
-                        spenixCyan,
                   ),
                 ),
-              ),
-            ],
+
+                const SizedBox(height: 15),
+
+                TextButton(
+                  onPressed: () {
+                    Get.toNamed('/register');
+                  },
+                  child: const Text(
+                    'Create new account',
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1139,254 +827,134 @@ class _LoginScreenState
 // REGISTER
 // ============================================================
 
-class RegisterScreen
-    extends StatefulWidget {
-  const RegisterScreen({
-    super.key,
-  });
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
 
   @override
-  State<RegisterScreen>
-      createState() =>
-          _RegisterScreenState();
+  State<RegisterScreen> createState() =>
+      _RegisterScreenState();
 }
 
 class _RegisterScreenState
     extends State<RegisterScreen> {
-  final name =
+  final nameController =
       TextEditingController();
 
-  final phone =
+  final phoneController =
       TextEditingController();
 
-  final password =
+  final passwordController =
       TextEditingController();
 
-  final confirm =
-      TextEditingController();
+  Future<void> register() async {
+    final name =
+        nameController.text.trim();
 
-  bool loading = false;
+    final phone =
+        phoneController.text.trim();
 
-  final db = DB();
+    final password =
+        passwordController.text;
 
-  Future<void> doRegister() async {
-    final normalized =
-        normalizeUgandaPhone(
-      phone.text,
+    if (name.isEmpty ||
+        phone.isEmpty ||
+        password.isEmpty) {
+      Get.snackbar(
+        'Registration',
+        'Fill in all fields.',
+      );
+      return;
+    }
+
+    final users = DB.getUsers();
+
+    final exists = users.any(
+      (user) => user['phone'] == phone,
     );
 
-    if (name.text.trim().isEmpty) {
+    if (exists) {
       Get.snackbar(
-        'Missing Name',
-        'Enter your name.',
-        snackPosition:
-            SnackPosition.BOTTOM,
+        'Registration',
+        'Phone number already exists.',
       );
       return;
     }
 
-    if (!isValidUgandaPhone(
-      normalized,
-    )) {
-      Get.snackbar(
-        'Invalid Phone',
-        'Enter a valid 10-digit Uganda phone number.',
-        snackPosition:
-            SnackPosition.BOTTOM,
-      );
-      return;
-    }
-
-    if (password.text.length <
-        6) {
-      Get.snackbar(
-        'Weak Password',
-        'Password must have at least 6 characters.',
-        snackPosition:
-            SnackPosition.BOTTOM,
-      );
-      return;
-    }
-
-    if (password.text !=
-        confirm.text) {
-      Get.snackbar(
-        'Password Error',
-        'Passwords do not match.',
-        snackPosition:
-            SnackPosition.BOTTOM,
-      );
-      return;
-    }
-
-    setState(() {
-      loading = true;
+    await DB.addUser({
+      'id': const Uuid().v4(),
+      'name': name,
+      'phone': phone,
+      'password': password,
+      'role': 'user',
     });
 
-    await db.init();
-
-    final existing =
-        await db.getUserByPhone(
-      normalized,
+    Get.snackbar(
+      'Success',
+      'Account created successfully.',
     );
 
-    if (existing != null) {
-      setState(() {
-        loading = false;
-      });
-
-      Get.snackbar(
-        'Already Registered',
-        'That phone number is already registered.',
-        snackPosition:
-            SnackPosition.BOTTOM,
-      );
-
-      return;
-    }
-
-    final user = {
-      'id':
-          const Uuid().v4(),
-      'name':
-          name.text.trim(),
-      'phone':
-          normalized,
-      'password':
-          password.text,
-      'role':
-          'user',
-      'active':
-          true,
-      'createdAt':
-          DateTime.now()
-              .toIso8601String(),
-    };
-
-    await db.addUser(
-      user,
-    );
-
-    await db.login(
-      normalized,
-      password.text,
-    );
-
-    if (!mounted) return;
-
-    setState(() {
-      loading = false;
-    });
-
-    Get.offAllNamed(
-      '/home',
-    );
+    Get.offAllNamed('/login');
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
-    return Scaffold(
-      appBar:
-          spenixAppBar(
-        'Create Account',
-      ),
-      body: SafeArea(
-        child:
-            SingleChildScrollView(
-          padding:
-              const EdgeInsets.all(
-            24,
-          ),
-          child: Column(
-            children: [
-              TextField(
-                controller:
-                    name,
-                decoration:
-                    const InputDecoration(
-                  labelText:
-                      'Full Name',
-                  prefixIcon:
-                      Icon(
-                    Icons.person,
-                    color:
-                        spenixCyan,
-                  ),
+  Widget build(BuildContext context) {
+    return SpenixScaffold(
+      title: 'Create Account',
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            TextField(
+              controller: nameController,
+              decoration:
+                  const InputDecoration(
+                labelText: 'Full name',
+                prefixIcon:
+                    Icon(Icons.person),
+                border:
+                    OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: phoneController,
+              keyboardType:
+                  TextInputType.phone,
+              decoration:
+                  const InputDecoration(
+                labelText: 'Phone number',
+                prefixIcon:
+                    Icon(Icons.phone),
+                border:
+                    OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller:
+                  passwordController,
+              obscureText: true,
+              decoration:
+                  const InputDecoration(
+                labelText: 'Password',
+                prefixIcon:
+                    Icon(Icons.lock),
+                border:
+                    OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 25),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton(
+                onPressed: register,
+                child: const Text(
+                  'CREATE ACCOUNT',
                 ),
               ),
-              const SizedBox(
-                height: 15,
-              ),
-              ugandaPhoneField(
-                phone,
-              ),
-              const SizedBox(
-                height: 15,
-              ),
-              TextField(
-                controller:
-                    password,
-                obscureText:
-                    true,
-                decoration:
-                    const InputDecoration(
-                  labelText:
-                      'Password',
-                  prefixIcon:
-                      Icon(
-                    Icons.lock,
-                    color:
-                        spenixCyan,
-                  ),
-                ),
-              ),
-              const SizedBox(
-                height: 15,
-              ),
-              TextField(
-                controller:
-                    confirm,
-                obscureText:
-                    true,
-                decoration:
-                    const InputDecoration(
-                  labelText:
-                      'Confirm Password',
-                  prefixIcon:
-                      Icon(
-                    Icons.lock_outline,
-                    color:
-                        spenixCyan,
-                  ),
-                ),
-              ),
-              const SizedBox(
-                height: 25,
-              ),
-              ElevatedButton(
-                onPressed:
-                    loading
-                        ? null
-                        : doRegister,
-                child:
-                    loading
-                        ? const CircularProgressIndicator(
-                            color:
-                                Colors.black,
-                          )
-                        : const Text(
-                            'CREATE ACCOUNT',
-                            style:
-                                TextStyle(
-                              fontWeight:
-                                  FontWeight.bold,
-                            ),
-                          ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -1397,84 +965,83 @@ class _RegisterScreenState
 // HOME
 // ============================================================
 
-class HomeScreen
-    extends StatefulWidget {
-  const HomeScreen({
-    super.key,
-  });
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
 
   @override
-  State<HomeScreen>
-      createState() =>
-          _HomeScreenState();
+  State<HomeScreen> createState() =>
+      _HomeScreenState();
 }
 
 class _HomeScreenState
-    extends State<HomeScreen>
-    with
-        SingleTickerProviderStateMixin {
-  final db = DB();
+    extends State<HomeScreen> {
+  GatewayStatus gateway =
+      GatewayStatus.waiting();
 
-  Map<String, dynamic>? user;
-
-  Map<String, dynamic>?
-      subscription;
-
-  bool _vpnConnected = false;
-  bool _connecting = false;
-
-  Timer? _connectionTimeout;
-
-  late AnimationController
-      _ringController;
-
-  StreamSubscription?
-      _vpnSubscription;
+  Timer? timer;
+  bool connecting = false;
 
   @override
   void initState() {
     super.initState();
 
-    _ringController =
-        AnimationController(
-      vsync: this,
-      duration:
-          const Duration(
-        seconds: 1,
-      ),
-    )..repeat();
+    refreshGateway();
 
-    load();
-
-    _vpnSubscription =
-        VpnService.status.listen(
-      (connected) {
-        if (!mounted) return;
-
-        setState(() {
-          _vpnConnected =
-              connected;
-
-          if (connected) {
-            _connecting =
-                false;
-
-            _connectionTimeout
-                ?.cancel();
-          }
-        });
-      },
+    timer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => refreshGateway(),
     );
   }
 
-  Future<void> load() async {
-    await db.init();
+  @override
+  void dispose() {
+    timer?.cancel();
+    super.dispose();
+  }
 
-    user =
-        await db.getCurrentUser();
+  Future<void> refreshGateway() async {
+    final result =
+        await GatewayService.check();
 
-    subscription =
-        await db.getActiveSubscription();
+    if (!mounted) return;
+
+    setState(() {
+      gateway = result;
+    });
+  }
+
+  Future<void> connect() async {
+    if (connecting) return;
+
+    setState(() {
+      connecting = true;
+    });
+
+    final result =
+        await VpnService.connect();
+
+    if (mounted) {
+      setState(() {
+        connecting = false;
+      });
+    }
+
+    if (!result) {
+      Get.snackbar(
+        'Spenix VPN',
+        VpnService.message.value,
+      );
+      return;
+    }
+
+    Get.snackbar(
+      'Connected',
+      'Spenix VPN is connected.',
+    );
+  }
+
+  Future<void> disconnect() async {
+    await VpnService.disconnect();
 
     if (mounted) {
       setState(() {});
@@ -1482,516 +1049,91 @@ class _HomeScreenState
   }
 
   @override
-  void dispose() {
-    _connectionTimeout
-        ?.cancel();
-
-    _vpnSubscription
-        ?.cancel();
-
-    _ringController.dispose();
-
-    super.dispose();
-  }
-
-  // ==========================================================
-  // FREE CONNECT
-  // ==========================================================
-
-  Future<void>
-      _handleConnect() async {
-    if (_vpnConnected) {
-      await _disconnect();
-      return;
-    }
-
-    if (_connecting) return;
-
-    setState(() {
-      _connecting = true;
-    });
-
-    _connectionTimeout
-        ?.cancel();
-
-    _connectionTimeout =
-        Timer(
-      const Duration(
-        seconds: 15,
-      ),
-      () {
-        if (!mounted) return;
-
-        if (!_vpnConnected) {
-          setState(() {
-            _connecting =
-                false;
-          });
-
-          Get.snackbar(
-            'Connection Failed',
-            'Spenix could not connect. Check your Internet connection and try again.',
-            snackPosition:
-                SnackPosition.BOTTOM,
-            duration:
-                const Duration(
-              seconds: 5,
-            ),
-          );
-        }
-      },
-    );
-
-    try {
-      await VpnService.connect(
-        username:
-            user?['id'] ??
-                'user',
-        password: 'pass',
-      );
-
-      if (VpnService
-          .isConnected) {
-        if (!mounted) return;
-
-        _connectionTimeout
-            ?.cancel();
-
-        setState(() {
-          _vpnConnected =
-              true;
-          _connecting =
-              false;
-        });
-
-        Get.snackbar(
-          'Connected',
-          'Spenix VPN is connected.',
-          snackPosition:
-              SnackPosition.BOTTOM,
-        );
-      }
-    } catch (e) {
-      _connectionTimeout
-          ?.cancel();
-
-      if (!mounted) return;
-
-      setState(() {
-        _connecting =
-            false;
-        _vpnConnected =
-            false;
-      });
-
-      Get.snackbar(
-        'Connection Failed',
-        e
-            .toString()
-            .replaceFirst(
-              'Exception: ',
-              '',
-            ),
-        snackPosition:
-            SnackPosition.BOTTOM,
-        duration:
-            const Duration(
-          seconds: 5,
+  Widget build(BuildContext context) {
+    return SpenixScaffold(
+      title: 'Spenix Internet',
+      actions: [
+        IconButton(
+          onPressed: () {
+            Get.toNamed('/account');
+          },
+          icon: const Icon(Icons.person),
         ),
-      );
-    }
-  }
-
-  Future<void> _disconnect() async {
-    _connectionTimeout
-        ?.cancel();
-
-    try {
-      await VpnService
-          .disconnect();
-    } catch (_) {}
-
-    if (!mounted) return;
-
-    setState(() {
-      _vpnConnected =
-          false;
-      _connecting =
-          false;
-    });
-
-    Get.snackbar(
-      'Disconnected',
-      'You are disconnected from Spenix.',
-      snackPosition:
-          SnackPosition.BOTTOM,
-    );
-  }
-
-  Color get buttonColor {
-    if (_vpnConnected) {
-      return spenixGreen;
-    }
-
-    return spenixCyan;
-  }
-
-  String get buttonText {
-    if (_connecting) {
-      return 'CONNECTING...';
-    }
-
-    if (_vpnConnected) {
-      return 'DISCONNECT';
-    }
-
-    return 'TAP TO\nCONNECT';
-  }
-
-  @override
-  Widget build(
-    BuildContext context,
-  ) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor:
-            spenixDark,
-        title: const Text(
-          'Spenix Internet',
-          style:
-              TextStyle(
-            fontWeight:
-                FontWeight.bold,
-          ),
-        ),
-        actions: [
-          IconButton(
-            icon:
-                const Icon(
-              Icons.person,
-            ),
-            onPressed: () {
-              Get.toNamed(
-                '/account',
-              );
-            },
-          ),
-        ],
-      ),
-      body:
-          RefreshIndicator(
-        onRefresh: load,
+      ],
+      body: RefreshIndicator(
+        onRefresh: refreshGateway,
         child: ListView(
-          padding:
-              const EdgeInsets.all(
-            20,
-          ),
+          padding: const EdgeInsets.all(16),
           children: [
             Text(
-              'Hello, ${user?['name'] ?? 'User'}',
-              style:
-                  const TextStyle(
-                fontSize: 24,
-                fontWeight:
-                    FontWeight.bold,
+              'Hello, ${Session.name}',
+              style: const TextStyle(
+                fontSize: 25,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(
-              height: 5,
-            ),
+
+            const SizedBox(height: 5),
+
             const Text(
-              'Your Spenix connection',
-              style:
-                  TextStyle(
-                color:
-                    Colors.white60,
+              'FREE TEST MODE',
+              style: TextStyle(
+                color: Colors.cyan,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(
-              height: 12,
-            ),
-            Container(
-              padding:
-                  const EdgeInsets
-                      .symmetric(
-                horizontal: 15,
-                vertical: 10,
-              ),
-              decoration:
-                  BoxDecoration(
-                color: spenixGreen
-                    .withOpacity(
-                  0.10,
-                ),
-                borderRadius:
-                    BorderRadius
-                        .circular(
-                  12,
-                ),
-                border:
-                    Border.all(
-                  color: spenixGreen
-                      .withOpacity(
-                    0.30,
-                  ),
-                ),
-              ),
-              child:
-                  const Row(
-                mainAxisAlignment:
-                    MainAxisAlignment
-                        .center,
-                children: [
-                  Icon(
-                    Icons
-                        .check_circle,
-                    color:
-                        spenixGreen,
-                    size: 20,
-                  ),
-                  SizedBox(
-                    width: 8,
-                  ),
-                  Text(
-                    'FREE TEST MODE',
-                    style:
-                        TextStyle(
-                      color:
-                          spenixGreen,
-                      fontWeight:
-                          FontWeight
-                              .bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(
-              height: 25,
-            ),
-            Container(
-              padding:
-                  const EdgeInsets.all(
-                20,
-              ),
-              decoration:
-                  BoxDecoration(
-                color:
-                    spenixCard,
-                borderRadius:
-                    BorderRadius
-                        .circular(
-                  20,
-                ),
-                border:
-                    Border.all(
-                  color:
-                      _vpnConnected
-                          ? spenixGreen
-                          : Colors
-                              .white12,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    _vpnConnected
-                        ? Icons.wifi
-                        : Icons
-                            .wifi_off,
-                    color:
-                        _vpnConnected
-                            ? spenixGreen
-                            : Colors
-                                .white54,
-                    size: 40,
-                  ),
-                  const SizedBox(
-                    width: 15,
-                  ),
-                  Expanded(
-                    child:
-                        Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment
-                              .start,
-                      children: [
-                        Text(
-                          _vpnConnected
-                              ? 'CONNECTED'
-                              : _connecting
-                                  ? 'CONNECTING...'
-                                  : 'DISCONNECTED',
-                          style:
-                              TextStyle(
-                            color:
-                                _vpnConnected
-                                    ? spenixGreen
-                                    : _connecting
-                                        ? spenixCyan
-                                        : Colors.white70,
-                            fontSize:
-                                18,
-                            fontWeight:
-                                FontWeight
-                                    .bold,
-                          ),
-                        ),
-                        const SizedBox(
-                          height: 5,
-                        ),
-                        Text(
-                          _vpnConnected
-                              ? 'Spenix VPN is active'
-                              : 'Ready to connect',
-                          style:
-                              const TextStyle(
-                            color:
-                                Colors
-                                    .white54,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(
-              height: 40,
-            ),
-            Center(
-              child:
-                  SizedBox(
-                width: 210,
-                height: 210,
-                child:
-                    Stack(
-                  alignment:
-                      Alignment
-                          .center,
+
+            const SizedBox(height: 20),
+
+            Card(
+              color: const Color(0xFF0B2025),
+              child: Padding(
+                padding:
+                    const EdgeInsets.all(20),
+                child: Column(
                   children: [
-                    if (_connecting)
-                      RotationTransition(
-                        turns:
-                            _ringController,
-                        child:
-                            Container(
-                          width:
-                              205,
-                          height:
-                              205,
-                          decoration:
-                              BoxDecoration(
-                            shape:
-                                BoxShape
-                                    .circle,
-                            border:
-                                Border.all(
-                              color:
-                                  spenixCyan,
-                              width:
-                                  5,
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (_connecting)
-                      Container(
+                    const Icon(
+                      Icons.public,
+                      size: 55,
+                      color: Colors.cyan,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      VpnService
+                          .message
+                          .value,
+                      textAlign:
+                          TextAlign.center,
+                    ),
+                    const SizedBox(height: 20),
+
+                    Obx(
+                      () => SizedBox(
                         width:
-                            180,
-                        height:
-                            180,
-                        decoration:
-                            BoxDecoration(
-                          shape:
-                              BoxShape
-                                  .circle,
-                          border:
-                              Border.all(
-                            color:
-                                spenixCyan.withOpacity(
-                              0.25,
-                            ),
-                            width:
-                                5,
-                          ),
-                        ),
-                      ),
-                    GestureDetector(
-                      onTap:
-                          _handleConnect,
-                      child:
-                          AnimatedContainer(
-                        duration:
-                            const Duration(
-                          milliseconds:
-                              300,
-                        ),
-                        width:
-                            160,
-                        height:
-                            160,
-                        decoration:
-                            BoxDecoration(
-                          shape:
-                              BoxShape
-                                  .circle,
-                          color:
-                              buttonColor,
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                                  buttonColor.withOpacity(
-                                0.35,
-                              ),
-                              blurRadius:
-                                  30,
-                              spreadRadius:
-                                  5,
-                            ),
-                          ],
-                        ),
-                        child:
-                            Center(
-                          child:
-                              Column(
-                            mainAxisAlignment:
-                                MainAxisAlignment
-                                    .center,
-                            children: [
-                              Icon(
-                                _vpnConnected
-                                    ? Icons
-                                        .power_settings_new
-                                    : Icons
-                                        .wifi,
-                                color:
-                                    Colors.black,
-                                size:
-                                    42,
-                              ),
-                              const SizedBox(
-                                height:
-                                    8,
-                              ),
-                              Text(
-                                buttonText,
-                                textAlign:
-                                    TextAlign
-                                        .center,
-                                style:
-                                    const TextStyle(
-                                  color:
-                                      Colors.black,
-                                  fontWeight:
-                                      FontWeight.bold,
-                                  fontSize:
-                                      14,
+                            double.infinity,
+                        height: 60,
+                        child: FilledButton(
+                          onPressed:
+                              connecting
+                                  ? null
+                                  : VpnService
+                                          .isConnected
+                                      ? disconnect
+                                      : connect,
+                          child: connecting
+                              ? const CircularProgressIndicator()
+                              : Text(
+                                  VpnService
+                                          .isConnected
+                                      ? 'DISCONNECT'
+                                      : 'CONNECT SPENIX VPN',
+                                  style:
+                                      const TextStyle(
+                                    fontWeight:
+                                        FontWeight
+                                            .bold,
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
                         ),
                       ),
                     ),
@@ -1999,95 +1141,576 @@ class _HomeScreenState
                 ),
               ),
             ),
-            const SizedBox(
-              height: 35,
+
+            const SizedBox(height: 15),
+
+            InfoCard(
+              title: 'Gateway',
+              value: gateway.online &&
+                      gateway.internetWorking
+                  ? 'ONLINE'
+                  : 'OFFLINE',
+              icon: Icons.router,
             ),
-            Container(
+
+            InfoCard(
+              title: 'Gateway Internet',
+              value:
+                  gateway.internetWorking
+                      ? 'Working'
+                      : 'Not working',
+              icon:
+                  Icons.wifi_tethering,
+            ),
+
+            InfoCard(
+              title: 'Your Current Speed',
+              value:
+                  '${gateway.userSpeeds[Session.userId] ?? gateway.userSpeeds[Session.phone] ?? 0.0} Mbps',
+              icon:
+                  Icons.speed,
+            ),
+
+            const SizedBox(height: 15),
+
+            ListTile(
+              leading: const Icon(
+                Icons.local_offer,
+                color: Colors.cyan,
+              ),
+              title: const Text(
+                'Packages',
+              ),
+              subtitle: const Text(
+                'View available internet packages',
+              ),
+              trailing:
+                  const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.toNamed('/packages');
+              },
+            ),
+
+            ListTile(
+              leading: const Icon(
+                Icons.confirmation_number,
+                color: Colors.cyan,
+              ),
+              title: const Text(
+                'Voucher',
+              ),
+              subtitle: const Text(
+                'Redeem an internet voucher',
+              ),
+              trailing:
+                  const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.toNamed('/voucher');
+              },
+            ),
+
+            ListTile(
+              leading: const Icon(
+                Icons.person,
+                color: Colors.cyan,
+              ),
+              title: const Text(
+                'My Account',
+              ),
+              trailing:
+                  const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.toNamed('/account');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// PACKAGES
+// ============================================================
+
+class PackagesScreen extends StatefulWidget {
+  const PackagesScreen({super.key});
+
+  @override
+  State<PackagesScreen> createState() =>
+      _PackagesScreenState();
+}
+
+class _PackagesScreenState
+    extends State<PackagesScreen> {
+  List<Map<String, dynamic>> packages = [];
+
+  @override
+  void initState() {
+    super.initState();
+
+    packages = DB.getPackages();
+  }
+
+  Future<void> activatePackage(
+    Map<String, dynamic> package,
+  ) async {
+    final days =
+        int.tryParse(
+              package['days']
+                      ?.toString() ??
+                  '1',
+            ) ??
+            1;
+
+    final started =
+        DateTime.now();
+
+    final expires =
+        started.add(
+      Duration(days: days),
+    );
+
+    await DB.addSubscription({
+      'id': const Uuid().v4(),
+      'userId': Session.userId,
+      'packageId':
+          package['id'],
+      'packageName':
+          package['name'],
+      'startedAt':
+          started.toIso8601String(),
+      'expiresAt':
+          expires.toIso8601String(),
+      'source': 'package',
+    });
+
+    await DB.addPayment({
+      'id': const Uuid().v4(),
+      'userId': Session.userId,
+      'amount':
+          package['price'] ?? 0,
+      'package':
+          package['name'],
+      'status': 'completed',
+      'date':
+          DateTime.now()
+              .toIso8601String(),
+    });
+
+    Get.snackbar(
+      'Package Activated',
+      '${package['name']} package activated.',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SpenixScaffold(
+      title: 'Internet Packages',
+      body: packages.isEmpty
+          ? const Center(
+              child: Text(
+                'No packages available.',
+              ),
+            )
+          : ListView.builder(
               padding:
-                  const EdgeInsets.all(
-                16,
-              ),
-              decoration:
-                  BoxDecoration(
-                color:
-                    spenixCard,
-                borderRadius:
-                    BorderRadius
-                        .circular(
-                  15,
-                ),
-              ),
-              child:
-                  const Row(
-                crossAxisAlignment:
-                    CrossAxisAlignment
-                        .start,
-                children: [
-                  Icon(
-                    Icons
-                        .info_outline,
-                    color:
-                        spenixCyan,
-                  ),
-                  SizedBox(
-                    width: 12,
-                  ),
-                  Expanded(
-                    child: Text(
-                      'Spenix is currently in free testing mode. No voucher, package, or payment is required.',
-                      style:
-                          TextStyle(
-                        color:
-                            Colors
-                                .white70,
-                      ),
+                  const EdgeInsets.all(16),
+              itemCount:
+                  packages.length,
+              itemBuilder:
+                  (context, index) {
+                final package =
+                    packages[index];
+
+                return Card(
+                  color:
+                      const Color(0xFF0B2025),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.all(
+                            18),
+                    child: Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment
+                              .start,
+                      children: [
+                        Text(
+                          package['name']
+                              .toString(),
+                          style:
+                              const TextStyle(
+                            fontSize: 24,
+                            fontWeight:
+                                FontWeight
+                                    .bold,
+                            color:
+                                Colors.cyan,
+                          ),
+                        ),
+                        const SizedBox(
+                          height: 8,
+                        ),
+                        Text(
+                          '${package['days']} day(s)',
+                        ),
+                        const SizedBox(
+                          height: 5,
+                        ),
+                        Text(
+                          'Price: ${package['price']}',
+                        ),
+                        const SizedBox(
+                          height: 15,
+                        ),
+                        SizedBox(
+                          width:
+                              double.infinity,
+                          child:
+                              FilledButton(
+                            onPressed: () =>
+                                activatePackage(
+                              package,
+                            ),
+                            child:
+                                const Text(
+                              'ACTIVATE',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(
-              height: 20,
-            ),
-            OutlinedButton
-                .icon(
-              onPressed: () {
-                Get.toNamed(
-                  '/voucher',
                 );
               },
-              icon:
-                  const Icon(
-                Icons
-                    .confirmation_number,
-              ),
-              label:
-                  const Text(
-                'USE VOUCHER',
+            ),
+    );
+  }
+}
+
+// ============================================================
+// VOUCHER
+// ============================================================
+
+class VoucherScreen extends StatefulWidget {
+  const VoucherScreen({super.key});
+
+  @override
+  State<VoucherScreen> createState() =>
+      _VoucherScreenState();
+}
+
+class _VoucherScreenState
+    extends State<VoucherScreen> {
+  final controller =
+      TextEditingController();
+
+  bool loading = false;
+
+  Future<void> redeem() async {
+    final code =
+        controller.text.trim();
+
+    if (code.isEmpty) {
+      Get.snackbar(
+        'Voucher',
+        'Enter voucher code.',
+      );
+      return;
+    }
+
+    setState(() {
+      loading = true;
+    });
+
+    final voucher =
+        DB.getVoucher(code);
+
+    if (voucher == null) {
+      setState(() {
+        loading = false;
+      });
+
+      Get.snackbar(
+        'Voucher',
+        'Voucher not found.',
+      );
+      return;
+    }
+
+    if (voucher['used'] == true) {
+      setState(() {
+        loading = false;
+      });
+
+      Get.snackbar(
+        'Voucher',
+        'This voucher has already been used.',
+      );
+      return;
+    }
+
+    final success =
+        await DB.useVoucher(
+      code,
+      Session.userId,
+    );
+
+    if (!success) {
+      setState(() {
+        loading = false;
+      });
+
+      Get.snackbar(
+        'Voucher',
+        'Voucher could not be used.',
+      );
+      return;
+    }
+
+    final days =
+        int.tryParse(
+              voucher['days']
+                      ?.toString() ??
+                  '1',
+            ) ??
+            1;
+
+    final started =
+        DateTime.now();
+
+    final expires =
+        started.add(
+      Duration(days: days),
+    );
+
+    await DB.addSubscription({
+      'id': const Uuid().v4(),
+      'userId': Session.userId,
+      'packageId': 'voucher',
+      'packageName':
+          voucher['packageName'] ??
+              'Voucher',
+      'startedAt':
+          started.toIso8601String(),
+      'expiresAt':
+          expires.toIso8601String(),
+      'source': 'voucher',
+    });
+
+    await DB.addPayment({
+      'id': const Uuid().v4(),
+      'userId': Session.userId,
+      'amount':
+          voucher['amount'] ?? 0,
+      'package':
+          voucher['packageName'] ??
+              'Voucher',
+      'status': 'voucher',
+      'date':
+          DateTime.now()
+              .toIso8601String(),
+    });
+
+    setState(() {
+      loading = false;
+    });
+
+    controller.clear();
+
+    Get.snackbar(
+      'Success',
+      'Voucher redeemed successfully.',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SpenixScaffold(
+      title: 'Redeem Voucher',
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.confirmation_number,
+              size: 80,
+              color: Colors.cyan,
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Enter your Spenix voucher code.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 25),
+            TextField(
+              controller: controller,
+              textCapitalization:
+                  TextCapitalization.characters,
+              decoration:
+                  const InputDecoration(
+                labelText: 'Voucher code',
+                hintText: 'SPX-XXXXXXXX',
+                prefixIcon:
+                    Icon(Icons.confirmation_number),
+                border:
+                    OutlineInputBorder(),
               ),
             ),
-            const SizedBox(
-              height: 12,
-            ),
-            OutlinedButton
-                .icon(
-              onPressed: () {
-                Get.toNamed(
-                  '/packages',
-                );
-              },
-              icon:
-                  const Icon(
-                Icons
-                    .shopping_bag,
-              ),
-              label:
-                  const Text(
-                'VIEW PACKAGES',
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: FilledButton(
+                onPressed:
+                    loading ? null : redeem,
+                child: loading
+                    ? const CircularProgressIndicator()
+                    : const Text(
+                        'REDEEM VOUCHER',
+                      ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ============================================================
+// ACCOUNT
+// ============================================================
+
+class AccountScreen extends StatefulWidget {
+  const AccountScreen({super.key});
+
+  @override
+  State<AccountScreen> createState() =>
+      _AccountScreenState();
+}
+
+class _AccountScreenState
+    extends State<AccountScreen> {
+  GatewayStatus gateway =
+      GatewayStatus.waiting();
+
+  @override
+  void initState() {
+    super.initState();
+
+    load();
+  }
+
+  Future<void> load() async {
+    final result =
+        await GatewayService.check();
+
+    if (!mounted) return;
+
+    setState(() {
+      gateway = result;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final subscription =
+        DB.getActiveSubscription(
+      Session.userId,
+    );
+
+    return SpenixScaffold(
+      title: 'My Account',
+      actions: [
+        IconButton(
+          onPressed: () {
+            Session.logout();
+
+            VpnService.disconnect();
+
+            Get.offAllNamed('/login');
+          },
+          icon: const Icon(Icons.logout),
+        ),
+      ],
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Center(
+            child: SpenixLogo(size: 85),
+          ),
+          const SizedBox(height: 20),
+
+          InfoCard(
+            title: 'Name',
+            value: Session.name,
+            icon: Icons.person,
+          ),
+
+          InfoCard(
+            title: 'Phone',
+            value: Session.phone,
+            icon: Icons.phone,
+          ),
+
+          InfoCard(
+            title: 'Subscription',
+            value: subscription == null
+                ? 'No active package'
+                : '${subscription['packageName']}',
+            icon: Icons.card_membership,
+          ),
+
+          if (subscription != null)
+            InfoCard(
+              title: 'Expires',
+              value:
+                  subscription['expiresAt']
+                      .toString()
+                      .replaceFirst('T', ' '),
+              icon: Icons.timer,
+            ),
+
+          InfoCard(
+            title: 'Current Speed',
+            value:
+                '${gateway.userSpeeds[Session.userId] ?? gateway.userSpeeds[Session.phone] ?? 0.0} Mbps',
+            icon: Icons.speed,
+          ),
+
+          const SizedBox(height: 20),
+
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: OutlinedButton(
+              onPressed: () {
+                Get.toNamed('/packages');
+              },
+              child: const Text(
+                'VIEW PACKAGES',
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: OutlinedButton(
+              onPressed: () {
+                Get.toNamed('/voucher');
+              },
+              child: const Text(
+                'REDEEM VOUCHER',
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -2099,668 +1722,269 @@ class _HomeScreenState
 
 class AdminDashboard
     extends StatefulWidget {
-  const AdminDashboard({
-    super.key,
-  });
+  const AdminDashboard({super.key});
 
   @override
-  State<AdminDashboard>
-      createState() =>
-          _AdminDashboardState();
+  State<AdminDashboard> createState() =>
+      _AdminDashboardState();
 }
 
 class _AdminDashboardState
     extends State<AdminDashboard> {
-  final db = DB();
-
   GatewayStatus gateway =
       GatewayStatus.waiting();
 
-  bool loading = true;
-
-  Timer? monitorTimer;
+  Timer? timer;
 
   @override
   void initState() {
     super.initState();
 
-    load();
+    refresh();
 
-    monitorTimer =
-        Timer.periodic(
-      const Duration(
-        seconds: 10,
-      ),
-      (_) => checkGateway(),
+    timer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => refresh(),
     );
   }
 
-  Future<void> load() async {
-    await db.init();
-
-    await checkGateway();
+  @override
+  void dispose() {
+    timer?.cancel();
+    super.dispose();
   }
 
-  Future<void>
-      checkGateway() async {
-    final status =
+  Future<void> refresh() async {
+    final result =
         await GatewayService.check();
 
     if (!mounted) return;
 
     setState(() {
-      gateway = status;
-      loading = false;
+      gateway = result;
     });
   }
 
   @override
-  void dispose() {
-    monitorTimer?.cancel();
-    super.dispose();
-  }
+  Widget build(BuildContext context) {
+    final users =
+        DB.getUsers();
 
-  Future<void> logout() async {
-    await db.logout();
+    final payments =
+        DB.getPayments();
 
-    try {
-      await VpnService
-          .disconnect();
-    } catch (_) {}
+    final vouchers =
+        DB.getVouchers();
 
-    Get.offAllNamed(
-      '/login',
-    );
-  }
+    return SpenixScaffold(
+      title: 'Spenix Control Center',
+      actions: [
+        IconButton(
+          onPressed: refresh,
+          icon: const Icon(Icons.refresh),
+        ),
+        IconButton(
+          onPressed: () {
+            Session.logout();
 
-  @override
-  Widget build(
-    BuildContext context,
-  ) {
-    return Scaffold(
-      appBar:
-          spenixAppBar(
-        'Admin Dashboard',
-        actions: [
-          IconButton(
-            tooltip:
-                'Refresh Gateway',
-            onPressed:
-                checkGateway,
-            icon:
-                const Icon(
-              Icons.refresh,
+            Get.offAllNamed('/login');
+          },
+          icon: const Icon(Icons.logout),
+        ),
+      ],
+      body: RefreshIndicator(
+        onRefresh: refresh,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text(
+              'GATEWAY STATUS',
+              style: TextStyle(
+                color: Colors.cyan,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-        ],
-      ),
 
-      drawer: Drawer(
-        backgroundColor:
-            spenixDark,
-        child:
-            SafeArea(
-          child:
-              ListView(
-            children: [
-              const DrawerHeader(
-                child:
-                    Column(
-                  mainAxisAlignment:
-                      MainAxisAlignment
-                          .center,
+            const SizedBox(height: 10),
+
+            InfoCard(
+              title: 'Gateway',
+              value: gateway.online
+                  ? 'ONLINE'
+                  : 'OFFLINE',
+              icon: Icons.router,
+            ),
+
+            InfoCard(
+              title: 'Gateway Internet',
+              value: gateway.internetWorking
+                  ? 'WORKING'
+                  : 'NOT WORKING',
+              icon: Icons.public,
+            ),
+
+            InfoCard(
+              title: 'Incoming Gateway',
+              value:
+                  '${gateway.incomingMbps.toStringAsFixed(2)} Mbps',
+              icon: Icons.download,
+            ),
+
+            InfoCard(
+              title: 'Total Mbps Used',
+              value:
+                  '${gateway.usedMbps.toStringAsFixed(2)} Mbps',
+              icon: Icons.upload,
+            ),
+
+            InfoCard(
+              title: 'Online Users',
+              value:
+                  '${gateway.onlineUsers}',
+              icon: Icons.people,
+            ),
+
+            Card(
+              color:
+                  const Color(0xFF0B2025),
+              child: Padding(
+                padding:
+                    const EdgeInsets.all(18),
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons
-                          .admin_panel_settings,
-                      color:
-                          spenixCyan,
-                      size:
-                          60,
-                    ),
-                    SizedBox(
-                      height:
-                          10,
-                    ),
-                    Text(
-                      'SPENIX ADMIN',
-                      style:
-                          TextStyle(
-                        color:
-                            spenixCyan,
+                    const Text(
+                      'RECOMMENDATION',
+                      style: TextStyle(
+                        color: Colors.cyan,
                         fontWeight:
-                            FontWeight
-                                .bold,
-                        fontSize:
-                            20,
+                            FontWeight.bold,
                       ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      gateway.recommendation,
+                      style:
+                          const TextStyle(
+                        fontSize: 21,
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      gateway.message,
                     ),
                   ],
                 ),
               ),
-
-              ListTile(
-                leading:
-                    const Icon(
-                  Icons.wifi,
-                  color:
-                      spenixCyan,
-                ),
-                title:
-                    const Text(
-                  'Connect / Home',
-                ),
-                onTap:
-                    () {
-                  Get.back();
-                  Get.offAllNamed(
-                    '/home',
-                  );
-                },
-              ),
-
-              const Divider(),
-
-              ListTile(
-                leading:
-                    const Icon(
-                  Icons.dashboard,
-                ),
-                title:
-                    const Text(
-                  'Dashboard',
-                ),
-                onTap:
-                    () {
-                  Get.back();
-                },
-              ),
-
-              ListTile(
-                leading:
-                    const Icon(
-                  Icons.people,
-                ),
-                title:
-                    const Text(
-                  'Users',
-                ),
-                onTap:
-                    () {
-                  Get.toNamed(
-                    '/admin/users',
-                  );
-                },
-              ),
-
-              ListTile(
-                leading:
-                    const Icon(
-                  Icons
-                      .shopping_bag,
-                ),
-                title:
-                    const Text(
-                  'Packages',
-                ),
-                onTap:
-                    () {
-                  Get.toNamed(
-                    '/admin/packages',
-                  );
-                },
-              ),
-
-              ListTile(
-                leading:
-                    const Icon(
-                  Icons.payment,
-                ),
-                title:
-                    const Text(
-                  'Payments',
-                ),
-                onTap:
-                    () {
-                  Get.toNamed(
-                    '/admin/payments',
-                  );
-                },
-              ),
-
-              ListTile(
-                leading:
-                    const Icon(
-                  Icons
-                      .confirmation_number,
-                ),
-                title:
-                    const Text(
-                  'Vouchers',
-                ),
-                onTap:
-                    () {
-                  Get.toNamed(
-                    '/admin/vouchers',
-                  );
-                },
-              ),
-
-              const Divider(),
-
-              ListTile(
-                leading:
-                    const Icon(
-                  Icons.settings,
-                ),
-                title:
-                    const Text(
-                  'Admin Account Settings',
-                ),
-                onTap:
-                    () {
-                  Get.toNamed(
-                    '/admin/settings',
-                  );
-                },
-              ),
-
-              ListTile(
-                leading:
-                    const Icon(
-                  Icons.logout,
-                  color:
-                      spenixRed,
-                ),
-                title:
-                    const Text(
-                  'Logout',
-                  style:
-                      TextStyle(
-                    color:
-                        spenixRed,
-                  ),
-                ),
-                onTap:
-                    logout,
-              ),
-            ],
-          ),
-        ),
-      ),
-
-      body:
-          RefreshIndicator(
-        onRefresh:
-            checkGateway,
-        child:
-            ListView(
-          padding:
-              const EdgeInsets.all(
-            20,
-          ),
-          children: [
-            const Text(
-              'Spenix Control Center',
-              style:
-                  TextStyle(
-                fontSize: 25,
-                fontWeight:
-                    FontWeight
-                        .bold,
-              ),
             ),
 
-            const SizedBox(
-              height: 5,
-            ),
+            const SizedBox(height: 20),
 
             const Text(
-              'Live gateway monitoring',
-              style:
-                  TextStyle(
-                color:
-                    Colors.white54,
+              'USER SPEEDS',
+              style: TextStyle(
+                color: Colors.cyan,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
             ),
 
-            const SizedBox(
-              height: 25,
-            ),
+            const SizedBox(height: 10),
 
-            // ==================================================
-            // GATEWAY STATUS
-            // ==================================================
+            _buildUserSpeeds(users),
 
-            _statusCard(
-              icon:
-                  Icons.router,
-              title:
-                  'Gateway Status',
-              value:
-                  gateway.online
-                      ? 'ONLINE'
-                      : gateway.message ==
-                              'Gateway API is not configured yet.'
-                          ? 'WAITING'
-                          : 'OFFLINE',
-              color:
-                  gateway.online
-                      ? spenixGreen
-                      : gateway.message ==
-                              'Gateway API is not configured yet.'
-                          ? spenixCyan
-                          : spenixRed,
-              subtitle:
-                  gateway.message,
-            ),
-
-            const SizedBox(
-              height: 12,
-            ),
-
-            // ==================================================
-            // INTERNET STATUS
-            // ==================================================
-
-            _statusCard(
-              icon:
-                  Icons.public,
-              title:
-                  'Gateway Internet',
-              value:
-                  gateway.online
-                      ? gateway
-                              .internetWorking
-                          ? 'WORKING'
-                          : 'NOT WORKING'
-                      : 'WAITING',
-              color:
-                  gateway.online
-                      ? gateway
-                              .internetWorking
-                          ? spenixGreen
-                          : spenixRed
-                      : spenixCyan,
-              subtitle:
-                  gateway.online
-                      ? gateway
-                              .internetWorking
-                          ? 'Gateway has usable Internet.'
-                          : 'Gateway is online but Internet is unavailable.'
-                      : 'Waiting for gateway data.',
-            ),
-
-            const SizedBox(
-              height: 12,
-            ),
-
-            // ==================================================
-            // INCOMING SPEED
-            // ==================================================
-
-            _statusCard(
-              icon:
-                  Icons.download,
-              title:
-                  'Gateway Incoming Speed',
-              value:
-                  gateway.online
-                      ? '${gateway.incomingMbps.toStringAsFixed(1)} Mbps'
-                      : 'WAITING',
-              color:
-                  gateway.online
-                      ? spenixCyan
-                      : Colors.white54,
-              subtitle:
-                  gateway.online
-                      ? 'Internet speed currently coming into the gateway.'
-                      : 'Real speed will appear when the gateway reports it.',
-            ),
-
-            const SizedBox(
-              height: 12,
-            ),
-
-            // ==================================================
-            // BANDWIDTH USED
-            // ==================================================
-
-            _statusCard(
-              icon:
-                  Icons.speed,
-              title:
-                  'Bandwidth Currently Used',
-              value:
-                  gateway.online
-                      ? '${gateway.usedMbps.toStringAsFixed(1)} Mbps'
-                      : 'WAITING',
-              color:
-                  gateway.online
-                      ? spenixCyan
-                      : Colors.white54,
-              subtitle:
-                  gateway.online
-                      ? 'Total bandwidth currently being used by connected users.'
-                      : 'Waiting for real gateway measurements.',
-            ),
-
-            const SizedBox(
-              height: 12,
-            ),
-
-            // ==================================================
-            // ONLINE USERS
-            // ==================================================
-
-            _statusCard(
-              icon:
-                  Icons.people,
-              title:
-                  'Online Users',
-              value:
-                  gateway.online
-                      ? '${gateway.onlineUsers}'
-                      : 'WAITING',
-              color:
-                  gateway.online
-                      ? spenixGreen
-                      : Colors.white54,
-              subtitle:
-                  gateway.online
-                      ? 'Users currently connected through the gateway.'
-                      : 'Online-user data will come from the Windows gateway.',
-            ),
-
-            const SizedBox(
-              height: 20,
-            ),
-
-            // ==================================================
-            // RECOMMENDATION
-            // ==================================================
-
-            Container(
-              padding:
-                  const EdgeInsets.all(
-                18,
-              ),
-              decoration:
-                  BoxDecoration(
-                color:
-                    spenixCard,
-                borderRadius:
-                    BorderRadius
-                        .circular(
-                  18,
-                ),
-                border:
-                    Border.all(
-                  color:
-                      spenixCyan.withOpacity(
-                    0.30,
-                  ),
-                ),
-              ),
-              child:
-                  Row(
-                crossAxisAlignment:
-                    CrossAxisAlignment
-                        .start,
-                children: [
-                  Icon(
-                    gateway.online
-                        ? Icons
-                            .analytics
-                        : Icons
-                            .hourglass_empty,
-                    color:
-                        spenixCyan,
-                    size:
-                        32,
-                  ),
-                  const SizedBox(
-                    width:
-                        14,
-                  ),
-                  Expanded(
-                    child:
-                        Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment
-                              .start,
-                      children: [
-                        const Text(
-                          'Gateway Recommendation',
-                          style:
-                              TextStyle(
-                            fontSize:
-                                17,
-                            fontWeight:
-                                FontWeight
-                                    .bold,
-                          ),
-                        ),
-                        const SizedBox(
-                          height:
-                              7,
-                        ),
-                        Text(
-                          gateway
-                                  .online
-                              ? gateway
-                                  .recommendation
-                              : 'WAITING FOR GATEWAY DATA',
-                          style:
-                              const TextStyle(
-                            color:
-                                spenixCyan,
-                            fontWeight:
-                                FontWeight
-                                    .bold,
-                          ),
-                        ),
-                        const SizedBox(
-                          height:
-                              6,
-                        ),
-                        Text(
-                          gateway
-                                  .online
-                              ? 'This recommendation will eventually be calculated from real gateway load and Internet capacity.'
-                              : 'No recommendation is made until the Windows gateway sends real measurements.',
-                          style:
-                              const TextStyle(
-                            color:
-                                Colors
-                                    .white60,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(
-              height: 25,
-            ),
-
-            // ==================================================
-            // USER SPEEDS
-            // ==================================================
+            const SizedBox(height: 20),
 
             const Text(
-              'User Speeds',
-              style:
-                  TextStyle(
-                fontSize:
-                    21,
-                fontWeight:
-                    FontWeight
-                        .bold,
+              'CONTROL CENTER',
+              style: TextStyle(
+                color: Colors.cyan,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
             ),
 
-            const SizedBox(
-              height: 10,
-            ),
-
-            _buildUserSpeeds(),
-
-            const SizedBox(
-              height: 25,
-            ),
-
-            // ==================================================
-            // MANAGEMENT
-            // ==================================================
-
-            _adminCard(
-              Icons.people,
-              'Manage Users',
-              () =>
-                  Get.toNamed(
-                '/admin/users',
+            ListTile(
+              leading: const Icon(
+                Icons.people,
               ),
+              title:
+                  const Text('Users'),
+              subtitle:
+                  Text('${users.length} users'),
+              trailing:
+                  const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.toNamed('/admin/users');
+              },
             ),
 
-            _adminCard(
-              Icons.shopping_bag,
-              'Manage Packages',
-              () =>
-                  Get.toNamed(
-                '/admin/packages',
+            ListTile(
+              leading: const Icon(
+                Icons.local_offer,
               ),
+              title:
+                  const Text('Packages'),
+              trailing:
+                  const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.toNamed(
+                  '/admin/packages',
+                );
+              },
             ),
 
-            _adminCard(
-              Icons
-                  .confirmation_number,
-              'Manage Vouchers',
-              () =>
-                  Get.toNamed(
-                '/admin/vouchers',
+            ListTile(
+              leading: const Icon(
+                Icons.payments,
               ),
+              title:
+                  const Text('Payments'),
+              subtitle:
+                  Text('${payments.length} payments'),
+              trailing:
+                  const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.toNamed(
+                  '/admin/payments',
+                );
+              },
             ),
 
-            _adminCard(
-              Icons.payment,
-              'View Payments',
-              () =>
-                  Get.toNamed(
-                '/admin/payments',
+            ListTile(
+              leading: const Icon(
+                Icons.confirmation_number,
               ),
+              title:
+                  const Text('Vouchers'),
+              subtitle:
+                  Text('${vouchers.length} vouchers'),
+              trailing:
+                  const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.toNamed(
+                  '/admin/vouchers',
+                );
+              },
             ),
 
-            _adminCard(
-              Icons.settings,
-              'Admin Account Settings',
-              () =>
-                  Get.toNamed(
-                '/admin/settings',
+            ListTile(
+              leading: const Icon(
+                Icons.settings,
               ),
+              title:
+                  const Text('Settings'),
+              trailing:
+                  const Icon(Icons.chevron_right),
+              onTap: () {
+                Get.toNamed(
+                  '/admin/settings',
+                );
+              },
             ),
           ],
         ),
@@ -2768,252 +1992,57 @@ class _AdminDashboardState
     );
   }
 
-  Widget _buildUserSpeeds() {
-    if (!gateway.online) {
-      return Card(
-        color:
-            spenixCard,
-        child:
-            const Padding(
-          padding:
-              EdgeInsets.all(
-            18,
-          ),
-          child:
-              Row(
-            children: [
-              Icon(
-                Icons.speed,
-                color:
-                    Colors.white38,
-              ),
-              SizedBox(
-                width:
-                    12,
-              ),
-              Expanded(
-                child:
-                    Text(
-                  'Waiting for the Windows gateway to provide each user\\'s current Mbps.',
-                  style:
-                      TextStyle(
-                    color:
-                        Colors.white60,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (gateway.userSpeeds.isEmpty) {
-      return Card(
-        color:
-            spenixCard,
-        child:
-            const Padding(
-          padding:
-              EdgeInsets.all(
-            18,
-          ),
-          child:
-              Text(
-            'No user speed data has been reported yet.',
-            style:
-                TextStyle(
-              color:
-                  Colors.white60,
-            ),
+  Widget _buildUserSpeeds(
+    List<Map<String, dynamic>> users,
+  ) {
+    if (users.isEmpty) {
+      return const Card(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text(
+            'No users found.',
           ),
         ),
       );
     }
 
     return Column(
-      children:
-          gateway.userSpeeds.entries
-              .map(
-        (entry) {
-          return Card(
-            color:
-                spenixCard,
-            margin:
-                const EdgeInsets.only(
-              bottom:
-                  8,
-            ),
-            child:
-                ListTile(
-              leading:
-                  const CircleAvatar(
-                backgroundColor:
-                    spenixCyan,
-                child:
-                    Icon(
-                  Icons.person,
-                  color:
-                      Colors.black,
-                ),
-              ),
-              title:
-                  Text(
-                entry.key,
-              ),
-              trailing:
-                  Text(
-                '${entry.value.toStringAsFixed(1)} Mbps',
-                style:
-                    const TextStyle(
-                  color:
-                      spenixCyan,
-                  fontWeight:
-                      FontWeight.bold,
-                ),
-              ),
-            ),
-          );
-        },
-      ).toList(),
-    );
-  }
+      children: users.map((user) {
+        final id =
+            user['id']?.toString() ?? '';
 
-  Widget _statusCard({
-    required IconData icon,
-    required String title,
-    required String value,
-    required Color color,
-    required String subtitle,
-  }) {
-    return Card(
-      color:
-          spenixCard,
-      child:
-          Padding(
-        padding:
-            const EdgeInsets.all(
-          18,
-        ),
-        child:
-            Row(
-          children: [
-            Container(
-              width:
-                  52,
-              height:
-                  52,
-              decoration:
-                  BoxDecoration(
-                color:
-                    color.withOpacity(
-                  0.10,
-                ),
-                shape:
-                    BoxShape.circle,
-              ),
-              child:
-                  Icon(
-                icon,
-                color:
-                    color,
-                size:
-                    28,
-              ),
-            ),
-            const SizedBox(
-              width:
-                  15,
-            ),
-            Expanded(
-              child:
-                  Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment
-                        .start,
-                children: [
-                  Text(
-                    title,
-                    style:
-                        const TextStyle(
-                      color:
-                          Colors.white60,
-                      fontSize:
-                          14,
-                    ),
-                  ),
-                  const SizedBox(
-                    height:
-                        4,
-                  ),
-                  Text(
-                    value,
-                    style:
-                        TextStyle(
-                      color:
-                          color,
-                      fontSize:
-                          21,
-                      fontWeight:
-                          FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(
-                    height:
-                        4,
-                  ),
-                  Text(
-                    subtitle,
-                    style:
-                        const TextStyle(
-                      color:
-                          Colors.white38,
-                      fontSize:
-                          12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+        final phone =
+            user['phone']?.toString() ?? '';
 
-  Widget _adminCard(
-    IconData icon,
-    String title,
-    VoidCallback onTap,
-  ) {
-    return Card(
-      color:
-          spenixCard,
-      margin:
-          const EdgeInsets.only(
-        bottom:
-            12,
-      ),
-      child:
-          ListTile(
-        leading:
-            Icon(
-          icon,
+        final speed =
+            gateway.userSpeeds[id] ??
+                gateway.userSpeeds[phone] ??
+                0.0;
+
+        return Card(
           color:
-              spenixCyan,
-        ),
-        title:
-            Text(title),
-        trailing:
-            const Icon(
-          Icons
-              .arrow_forward_ios,
-          size:
-              16,
-        ),
-        onTap:
-            onTap,
-      ),
+              const Color(0xFF0B2025),
+          child: ListTile(
+            leading: const Icon(
+              Icons.person,
+              color: Colors.cyan,
+            ),
+            title: Text(
+              user['name']?.toString() ??
+                  'User',
+            ),
+            subtitle: Text(phone),
+            trailing: Text(
+              '${speed.toStringAsFixed(2)} Mbps',
+              style: const TextStyle(
+                color: Colors.cyan,
+                fontWeight:
+                    FontWeight.bold,
+              ),
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 }
@@ -3024,148 +2053,43 @@ class _AdminDashboardState
 
 class AdminUsersScreen
     extends StatefulWidget {
-  const AdminUsersScreen({
-    super.key,
-  });
+  const AdminUsersScreen({super.key});
 
   @override
-  State<AdminUsersScreen>
-      createState() =>
-          _AdminUsersScreenState();
+  State<AdminUsersScreen> createState() =>
+      _AdminUsersScreenState();
 }
 
 class _AdminUsersScreenState
     extends State<AdminUsersScreen> {
-  final db = DB();
-
-  List<Map<String, dynamic>>
-      users = [];
-
   @override
-  void initState() {
-    super.initState();
-    load();
-  }
+  Widget build(BuildContext context) {
+    final users =
+        DB.getUsers();
 
-  Future<void> load() async {
-    await db.init();
-
-    users =
-        await db.getUsers();
-
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  Future<void> toggleUser(
-    Map<String, dynamic> user,
-  ) async {
-    if (user['role'] ==
-        'admin') {
-      Get.snackbar(
-        'Protected',
-        'Admin account cannot be disabled here.',
-        snackPosition:
-            SnackPosition.BOTTOM,
-      );
-      return;
-    }
-
-    await db.updateUser(
-      user['id'],
-      {
-        'active':
-            !(user['active'] ==
-                true),
-      },
-    );
-
-    await load();
-  }
-
-  @override
-  Widget build(
-    BuildContext context,
-  ) {
-    return Scaffold(
-      appBar:
-          spenixAppBar(
-        'Users',
-      ),
-      body:
-          ListView.builder(
-        padding:
-            const EdgeInsets.all(
-          12,
-        ),
-        itemCount:
-            users.length,
+    return SpenixScaffold(
+      title: 'Users',
+      body: ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: users.length,
         itemBuilder:
             (context, index) {
           final user =
               users[index];
 
           return Card(
-            color:
-                spenixCard,
-            child:
-                ListTile(
-              leading:
-                  CircleAvatar(
-                backgroundColor:
-                    user['role'] ==
-                            'admin'
-                        ? spenixCyan
-                        : Colors
-                            .white12,
+            child: ListTile(
+              leading: const CircleAvatar(
                 child:
-                    Icon(
-                  user['role'] ==
-                          'admin'
-                      ? Icons
-                          .admin_panel_settings
-                      : Icons.person,
-                  color:
-                      user['role'] ==
-                              'admin'
-                          ? Colors
-                              .black
-                          : Colors
-                              .white,
-                ),
+                    Icon(Icons.person),
               ),
-              title:
-                  Text(
-                user['name'] ??
-                    '',
+              title: Text(
+                user['name']
+                    .toString(),
               ),
-              subtitle:
-                  Text(
-                user['phone'] ??
-                    '',
+              subtitle: Text(
+                '${user['phone']} • ${user['role']}',
               ),
-              trailing:
-                  user['role'] ==
-                          'admin'
-                      ? const Text(
-                          'ADMIN',
-                          style:
-                              TextStyle(
-                            color:
-                                spenixCyan,
-                          ),
-                        )
-                      : Switch(
-                          value:
-                              user['active'] ==
-                                  true,
-                          onChanged:
-                              (_) =>
-                                  toggleUser(
-                            user,
-                          ),
-                        ),
             ),
           );
         },
@@ -3185,210 +2109,177 @@ class AdminPackagesScreen
   });
 
   @override
-  State<AdminPackagesScreen>
-      createState() =>
-          _AdminPackagesScreenState();
+  State<AdminPackagesScreen> createState() =>
+      _AdminPackagesScreenState();
 }
 
 class _AdminPackagesScreenState
     extends State<AdminPackagesScreen> {
-  final db = DB();
+  Future<void> addPackage() async {
+    final nameController =
+        TextEditingController();
 
-  List<Map<String, dynamic>>
-      packages = [];
+    final priceController =
+        TextEditingController();
 
-  final name =
-      TextEditingController();
+    final daysController =
+        TextEditingController();
 
-  final days =
-      TextEditingController();
+    final result =
+        await Get.dialog<bool>(
+      AlertDialog(
+        title:
+            const Text('Add Package'),
+        content: Column(
+          mainAxisSize:
+              MainAxisSize.min,
+          children: [
+            TextField(
+              controller:
+                  nameController,
+              decoration:
+                  const InputDecoration(
+                labelText: 'Package name',
+              ),
+            ),
+            TextField(
+              controller:
+                  priceController,
+              keyboardType:
+                  TextInputType.number,
+              decoration:
+                  const InputDecoration(
+                labelText: 'Price',
+              ),
+            ),
+            TextField(
+              controller:
+                  daysController,
+              keyboardType:
+                  TextInputType.number,
+              decoration:
+                  const InputDecoration(
+                labelText: 'Days',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Get.back(result: false),
+            child:
+                const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final name =
+                  nameController
+                      .text
+                      .trim();
 
-  final price =
-      TextEditingController();
+              final price =
+                  double.tryParse(
+                        priceController
+                            .text
+                            .trim(),
+                      ) ??
+                      0;
 
-  @override
-  void initState() {
-    super.initState();
-    load();
-  }
+              final days =
+                  int.tryParse(
+                        daysController
+                            .text
+                            .trim(),
+                      ) ??
+                      1;
 
-  Future<void> load() async {
-    await db.init();
+              if (name.isEmpty) {
+                return;
+              }
 
-    packages =
-        await db.getPackages();
+              await DB.addPackage({
+                'id':
+                    const Uuid().v4(),
+                'name': name,
+                'price': price,
+                'days': days,
+              });
 
-    if (mounted) {
+              Get.back(
+                result: true,
+              );
+            },
+            child:
+                const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
       setState(() {});
     }
   }
 
-  Future<void> addPackage() async {
-    if (name.text.trim().isEmpty) {
-      return;
-    }
-
-    final duration =
-        int.tryParse(
-              days.text,
-            ) ??
-            1;
-
-    final amount =
-        double.tryParse(
-              price.text,
-            ) ??
-            0;
-
-    await db.addPackage({
-      'id':
-          const Uuid().v4(),
-      'name':
-          name.text.trim(),
-      'durationDays':
-          duration,
-      'price':
-          amount,
-    });
-
-    name.clear();
-    days.clear();
-    price.clear();
-
-    await load();
-  }
-
-  Future<void>
-      deletePackage(
+  Future<void> deletePackage(
     String id,
   ) async {
-    await db.deletePackage(
-      id,
-    );
+    await DB.deletePackage(id);
 
-    await load();
+    setState(() {});
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
-    return Scaffold(
-      appBar:
-          spenixAppBar(
-        'Manage Packages',
-      ),
-      body:
-          ListView(
-        padding:
-            const EdgeInsets.all(
-          16,
+  Widget build(BuildContext context) {
+    final packages =
+        DB.getPackages();
+
+    return SpenixScaffold(
+      title: 'Manage Packages',
+      actions: [
+        IconButton(
+          onPressed: addPackage,
+          icon:
+              const Icon(Icons.add),
         ),
-        children: [
-          const Text(
-            'Create Package',
-            style:
-                TextStyle(
-              fontSize: 21,
-              fontWeight:
-                  FontWeight.bold,
-            ),
-          ),
-          const SizedBox(
-            height: 15,
-          ),
-          TextField(
-            controller:
-                name,
-            decoration:
-                const InputDecoration(
-              labelText:
-                  'Package Name',
-            ),
-          ),
-          const SizedBox(
-            height: 10,
-          ),
-          TextField(
-            controller:
-                days,
-            keyboardType:
-                TextInputType
-                    .number,
-            decoration:
-                const InputDecoration(
-              labelText:
-                  'Duration Days',
-            ),
-          ),
-          const SizedBox(
-            height: 10,
-          ),
-          TextField(
-            controller:
-                price,
-            keyboardType:
-                const TextInputType
-                    .numberWithOptions(
-              decimal:
-                  true,
-            ),
-            decoration:
-                const InputDecoration(
-              labelText:
-                  'Price UGX',
-            ),
-          ),
-          const SizedBox(
-            height: 15,
-          ),
-          ElevatedButton(
-            onPressed:
-                addPackage,
-            child:
-                const Text(
-              'ADD PACKAGE',
-            ),
-          ),
-          const SizedBox(
-            height: 25,
-          ),
-          ...packages.map(
-            (package) =>
-                Card(
-              color:
-                  spenixCard,
-              child:
-                  ListTile(
-                title:
-                    Text(
-                  package[
-                          'name'] ??
-                      '',
+      ],
+      body: ListView.builder(
+        padding:
+            const EdgeInsets.all(12),
+        itemCount:
+            packages.length,
+        itemBuilder:
+            (context, index) {
+          final package =
+              packages[index];
+
+          return Card(
+            child: ListTile(
+              title: Text(
+                package['name']
+                    .toString(),
+              ),
+              subtitle: Text(
+                '${package['days']} days • Price ${package['price']}',
+              ),
+              trailing:
+                  IconButton(
+                onPressed: () =>
+                    deletePackage(
+                  package['id']
+                      .toString(),
                 ),
-                subtitle:
-                    Text(
-                  '${package['durationDays']} days • UGX ${package['price']}',
-                ),
-                trailing:
-                    IconButton(
-                  icon:
-                      const Icon(
-                    Icons.delete,
-                    color:
-                        spenixRed,
-                  ),
-                  onPressed:
-                      () =>
-                          deletePackage(
-                    package[
-                        'id'],
-                  ),
+                icon:
+                    const Icon(
+                  Icons.delete,
+                  color:
+                      Colors.redAccent,
                 ),
               ),
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -3399,97 +2290,56 @@ class _AdminPackagesScreenState
 // ============================================================
 
 class AdminPaymentsScreen
-    extends StatefulWidget {
+    extends StatelessWidget {
   const AdminPaymentsScreen({
     super.key,
   });
 
   @override
-  State<AdminPaymentsScreen>
-      createState() =>
-          _AdminPaymentsScreenState();
-}
+  Widget build(BuildContext context) {
+    final payments =
+        DB.getPayments();
 
-class _AdminPaymentsScreenState
-    extends State<AdminPaymentsScreen> {
-  final db = DB();
+    return SpenixScaffold(
+      title: 'Payments',
+      body: payments.isEmpty
+          ? const Center(
+              child: Text(
+                'No payments yet.',
+              ),
+            )
+          : ListView.builder(
+              padding:
+                  const EdgeInsets.all(12),
+              itemCount:
+                  payments.length,
+              itemBuilder:
+                  (context, index) {
+                final payment =
+                    payments[index];
 
-  List<Map<String, dynamic>>
-      payments = [];
-
-  @override
-  void initState() {
-    super.initState();
-    load();
-  }
-
-  Future<void> load() async {
-    await db.init();
-
-    payments =
-        await db.getPayments();
-
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  @override
-  Widget build(
-    BuildContext context,
-  ) {
-    return Scaffold(
-      appBar:
-          spenixAppBar(
-        'Payments',
-      ),
-      body:
-          payments.isEmpty
-              ? const Center(
-                  child:
-                      Text(
-                    'No payments yet.',
-                  ),
-                )
-              : ListView
-                  .builder(
-                  padding:
-                      const EdgeInsets.all(
-                    12,
-                  ),
-                  itemCount:
-                      payments.length,
-                  itemBuilder:
-                      (context,
-                          index) {
-                    final payment =
-                        payments[
-                            index];
-
-                    return Card(
+                return Card(
+                  child: ListTile(
+                    leading:
+                        const Icon(
+                      Icons.payments,
                       color:
-                          spenixCard,
-                      child:
-                          ListTile(
-                        leading:
-                            const Icon(
-                          Icons
-                              .payment,
-                          color:
-                              spenixGreen,
-                        ),
-                        title:
-                            Text(
-                          'UGX ${payment['amount'] ?? 0}',
-                        ),
-                        subtitle:
-                            Text(
-                          'Voucher: ${payment['voucher'] ?? '-'}\nStatus: ${payment['status'] ?? '-'}',
-                        ),
-                      ),
-                    );
-                  },
-                ),
+                          Colors.cyan,
+                    ),
+                    title: Text(
+                      '${payment['package']}',
+                    ),
+                    subtitle: Text(
+                      'User: ${payment['userId']}\n'
+                      'Status: ${payment['status']}',
+                    ),
+                    trailing: Text(
+                      '${payment['amount']}',
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 }
@@ -3505,505 +2355,228 @@ class AdminVouchersScreen
   });
 
   @override
-  State<AdminVouchersScreen>
-      createState() =>
-          _AdminVouchersScreenState();
+  State<AdminVouchersScreen> createState() =>
+      _AdminVouchersScreenState();
 }
 
 class _AdminVouchersScreenState
     extends State<AdminVouchersScreen> {
-  final db = DB();
+  String generateCode() {
+    const chars =
+        'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
-  List<Map<String, dynamic>>
-      vouchers = [];
+    final random =
+        DateTime.now()
+            .microsecondsSinceEpoch;
 
-  @override
-  void initState() {
-    super.initState();
-    load();
-  }
+    String code = '';
 
-  Future<void> load() async {
-    await db.init();
+    for (int i = 0; i < 10; i++) {
+      final index =
+          (random + i * 17) %
+              chars.length;
 
-    vouchers =
-        await db.getVouchers();
-
-    if (mounted) {
-      setState(() {});
+      code += chars[index];
     }
+
+    return 'SPX-$code';
   }
 
-  Future<String>
-      uniqueVoucherCode() async {
-    while (true) {
-      final code =
-          generateSecureVoucherCode();
-
-      final existing =
-          await db
-              .getVoucherByCode(
-        code,
-      );
-
-      if (existing == null) {
-        return code;
-      }
-    }
-  }
-
-  Future<void>
-      generateVoucher() async {
-    final daysController =
+  Future<void> createVoucher() async {
+    final packageController =
         TextEditingController(
-      text: '1',
+      text: 'Daily',
     );
-
-    final countController =
-        TextEditingController(
-      text: '1',
-    );
-
-    final result =
-        await Get.dialog<
-            Map<String, int>>(
-      AlertDialog(
-        backgroundColor:
-            spenixCard,
-        title:
-            const Text(
-          'Generate Secure Vouchers',
-        ),
-        content:
-            Column(
-          mainAxisSize:
-              MainAxisSize.min,
-          children: [
-            TextField(
-              controller:
-                  countController,
-              keyboardType:
-                  TextInputType
-                      .number,
-              decoration:
-                  const InputDecoration(
-                labelText:
-                    'Number of Vouchers',
-              ),
-            ),
-            const SizedBox(
-              height: 12,
-            ),
-            TextField(
-              controller:
-                  daysController,
-              keyboardType:
-                  TextInputType
-                      .number,
-              decoration:
-                  const InputDecoration(
-                labelText:
-                    'Duration Days',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed:
-                () => Get.back(),
-            child:
-                const Text(
-              'CANCEL',
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final count =
-                  int.tryParse(
-                        countController
-                            .text,
-                      ) ??
-                      1;
-
-              final days =
-                  int.tryParse(
-                        daysController
-                            .text,
-                      ) ??
-                      1;
-
-              Get.back(
-                result: {
-                  'count':
-                      count,
-                  'days':
-                      days,
-                },
-              );
-            },
-            child:
-                const Text(
-              'GENERATE',
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (result == null) return;
-
-    final count =
-        result['count'] ?? 1;
-
-    final days =
-        result['days'] ?? 1;
-
-    if (count < 1 ||
-        count > 500) {
-      Get.snackbar(
-        'Invalid Count',
-        'Choose between 1 and 500 vouchers.',
-        snackPosition:
-            SnackPosition.BOTTOM,
-      );
-      return;
-    }
-
-    for (int i = 0;
-        i < count;
-        i++) {
-      final code =
-          await uniqueVoucherCode();
-
-      vouchers.add({
-        'id':
-            const Uuid().v4(),
-        'code':
-            code,
-        'durationDays':
-            days,
-        'price':
-            0,
-        'used':
-            false,
-        'createdAt':
-            DateTime.now()
-                .toIso8601String(),
-      });
-    }
-
-    await db.saveVouchers(
-      vouchers,
-    );
-
-    await load();
-
-    Get.snackbar(
-      'Vouchers Created',
-      '$count secure voucher(s) created.',
-      snackPosition:
-          SnackPosition.BOTTOM,
-    );
-  }
-
-  Future<void>
-      createManualVoucher() async {
-    final codeController =
-        TextEditingController();
 
     final daysController =
         TextEditingController(
       text: '1',
     );
 
+    final amountController =
+        TextEditingController(
+      text: '0',
+    );
+
     final result =
-        await Get.dialog<
-            Map<String, dynamic>>(
+        await Get.dialog<bool>(
       AlertDialog(
-        backgroundColor:
-            spenixCard,
-        title:
-            const Text(
-          'Create Manual Voucher',
+        title: const Text(
+          'Create Voucher',
         ),
-        content:
-            Column(
+        content: Column(
           mainAxisSize:
               MainAxisSize.min,
           children: [
             TextField(
               controller:
-                  codeController,
-              textCapitalization:
-                  TextCapitalization
-                      .characters,
+                  packageController,
               decoration:
                   const InputDecoration(
                 labelText:
-                    'Your Voucher Code',
-                hintText:
-                    'MY-SPENIX-001',
+                    'Package name',
               ),
-            ),
-            const SizedBox(
-              height: 12,
             ),
             TextField(
               controller:
                   daysController,
               keyboardType:
-                  TextInputType
-                      .number,
+                  TextInputType.number,
               decoration:
                   const InputDecoration(
-                labelText:
-                    'Duration Days',
+                labelText: 'Days',
+              ),
+            ),
+            TextField(
+              controller:
+                  amountController,
+              keyboardType:
+                  TextInputType.number,
+              decoration:
+                  const InputDecoration(
+                labelText: 'Amount',
               ),
             ),
           ],
         ),
         actions: [
           TextButton(
-            onPressed:
-                () => Get.back(),
-            child:
-                const Text(
-              'CANCEL',
+            onPressed: () =>
+                Get.back(
+              result: false,
             ),
+            child:
+                const Text('Cancel'),
           ),
-          ElevatedButton(
-            onPressed: () {
+          FilledButton(
+            onPressed: () async {
               final code =
-                  codeController
-                      .text
-                      .trim()
-                      .toUpperCase();
+                  generateCode();
 
               final days =
                   int.tryParse(
                         daysController
+                            .text,
+                      ) ??
+                      1;
+
+              final amount =
+                  double.tryParse(
+                        amountController
                             .text,
                       ) ??
                       0;
 
-              if (code.length <
-                  6) {
-                Get.snackbar(
-                  'Invalid Code',
-                  'Voucher code must have at least 6 characters.',
-                  snackPosition:
-                      SnackPosition.BOTTOM,
-                );
-                return;
-              }
-
-              if (days < 1) {
-                Get.snackbar(
-                  'Invalid Duration',
-                  'Duration must be at least 1 day.',
-                  snackPosition:
-                      SnackPosition.BOTTOM,
-                );
-                return;
-              }
+              await DB.addVoucher({
+                'id':
+                    const Uuid().v4(),
+                'code': code,
+                'packageName':
+                    packageController
+                        .text
+                        .trim(),
+                'days': days,
+                'amount':
+                    amount,
+                'used': false,
+                'createdAt':
+                    DateTime.now()
+                        .toIso8601String(),
+              });
 
               Get.back(
-                result: {
-                  'code':
-                      code,
-                  'days':
-                      days,
-                },
+                result: true,
+              );
+
+              Get.snackbar(
+                'Voucher Created',
+                code,
               );
             },
             child:
-                const Text(
-              'CREATE',
-            ),
+                const Text('Create'),
           ),
         ],
       ),
     );
 
-    if (result == null) return;
-
-    final voucherCode =
-        result['code']
-            as String;
-
-    final existing =
-        await db
-            .getVoucherByCode(
-      voucherCode,
-    );
-
-    if (existing != null) {
-      Get.snackbar(
-        'Code Already Exists',
-        'Choose another voucher code.',
-        snackPosition:
-            SnackPosition.BOTTOM,
-      );
-      return;
+    if (result == true) {
+      setState(() {});
     }
-
-    vouchers.add({
-      'id':
-          const Uuid().v4(),
-      'code':
-          voucherCode,
-      'durationDays':
-          result['days'],
-      'price':
-          0,
-      'used':
-          false,
-      'manual':
-          true,
-      'createdAt':
-          DateTime.now()
-              .toIso8601String(),
-    });
-
-    await db.saveVouchers(
-      vouchers,
-    );
-
-    await load();
-
-    Get.snackbar(
-      'Voucher Created',
-      voucherCode,
-      snackPosition:
-          SnackPosition.BOTTOM,
-    );
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
-    return Scaffold(
-      appBar:
-          spenixAppBar(
-        'Manage Vouchers',
-      ),
-      floatingActionButton:
-          FloatingActionButton
-              .extended(
-        backgroundColor:
-            spenixCyan,
-        foregroundColor:
-            Colors.black,
-        onPressed:
-            generateVoucher,
-        icon:
-            const Icon(
-          Icons.add,
-        ),
-        label:
-            const Text(
-          'GENERATE',
-        ),
-      ),
-      body:
-          Column(
-        children: [
-          Padding(
-            padding:
-                const EdgeInsets.all(
-              16,
-            ),
-            child:
-                OutlinedButton
-                    .icon(
-              onPressed:
-                  createManualVoucher,
-              icon:
-                  const Icon(
-                Icons.edit,
-              ),
-              label:
-                  const Text(
-                'CREATE MY OWN VOUCHER CODE',
-              ),
-            ),
-          ),
-          Expanded(
-            child:
-                vouchers.isEmpty
-                    ? const Center(
-                        child:
-                            Text(
-                          'No vouchers created.',
-                        ),
-                      )
-                    : ListView
-                        .builder(
-                        padding:
-                            const EdgeInsets.all(
-                          12,
-                        ),
-                        itemCount:
-                            vouchers.length,
-                        itemBuilder:
-                            (
-                          context,
-                          index,
-                        ) {
-                          final voucher =
-                              vouchers[
-                                  index];
+  Widget build(BuildContext context) {
+    final vouchers =
+        DB.getVouchers();
 
-                          final used =
-                              voucher[
-                                      'used'] ==
-                                  true;
+    return SpenixScaffold(
+      title: 'Vouchers',
+      actions: [
+        IconButton(
+          onPressed:
+              createVoucher,
+          icon:
+              const Icon(Icons.add),
+        ),
+      ],
+      body: vouchers.isEmpty
+          ? const Center(
+              child: Text(
+                'No vouchers created.',
+              ),
+            )
+          : ListView.builder(
+              padding:
+                  const EdgeInsets.all(12),
+              itemCount:
+                  vouchers.length,
+              itemBuilder:
+                  (context, index) {
+                final voucher =
+                    vouchers[index];
 
-                          return Card(
-                            color:
-                                spenixCard,
-                            child:
-                                ListTile(
-                              leading:
-                                  Icon(
-                                used
-                                    ? Icons
-                                        .check_circle
-                                    : Icons
-                                        .confirmation_number,
-                                color:
-                                    used
-                                        ? Colors.white38
-                                        : spenixCyan,
-                              ),
-                              title:
-                                  Text(
-                                voucher[
-                                        'code'] ??
-                                    '',
-                                style:
-                                    TextStyle(
-                                  fontWeight:
-                                      FontWeight.bold,
-                                  color:
-                                      used
-                                          ? Colors.white38
-                                          : Colors.white,
-                                ),
-                              ),
-                              subtitle:
-                                  Text(
-                                '${voucher['durationDays']} day(s) • ${used ? 'USED' : 'AVAILABLE'}',
-                              ),
-                            ),
-                          );
-                        },
+                return Card(
+                  child: ListTile(
+                    leading:
+                        const Icon(
+                      Icons
+                          .confirmation_number,
+                      color:
+                          Colors.cyan,
+                    ),
+                    title: Text(
+                      voucher['code']
+                          .toString(),
+                      style:
+                          const TextStyle(
+                        fontWeight:
+                            FontWeight
+                                .bold,
                       ),
-          ),
-        ],
-      ),
+                    ),
+                    subtitle: Text(
+                      '${voucher['packageName']} • ${voucher['days']} day(s)',
+                    ),
+                    trailing: Text(
+                      voucher['used'] == true
+                          ? 'USED'
+                          : 'ACTIVE',
+                      style: TextStyle(
+                        color:
+                            voucher['used'] ==
+                                    true
+                                ? Colors.red
+                                : Colors.green,
+                        fontWeight:
+                            FontWeight
+                                .bold,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
     );
   }
 }
@@ -4019,463 +2592,169 @@ class AdminSettingsScreen
   });
 
   @override
-  State<AdminSettingsScreen>
-      createState() =>
-          _AdminSettingsScreenState();
+  State<AdminSettingsScreen> createState() =>
+      _AdminSettingsScreenState();
 }
 
 class _AdminSettingsScreenState
     extends State<AdminSettingsScreen> {
-  final db = DB();
+  final gatewayController =
+      TextEditingController(
+    text: GatewayService.defaultEndpoint,
+  );
 
-  final phone =
+  final phoneController =
       TextEditingController();
 
-  final currentPassword =
+  final passwordController =
       TextEditingController();
-
-  final newPassword =
-      TextEditingController();
-
-  final confirmPassword =
-      TextEditingController();
-
-  final gatewayUrl =
-      TextEditingController();
-
-  Map<String, dynamic>?
-      admin;
-
-  bool loading = true;
-  bool saving = false;
 
   @override
   void initState() {
     super.initState();
+
     load();
   }
 
   Future<void> load() async {
-    await db.init();
+    final endpoint =
+        await GatewayService.getEndpoint();
 
-    final current =
-        await db.getCurrentUser();
+    final prefs =
+        await SharedPreferences
+            .getInstance();
 
-    if (current == null ||
-        current['role'] !=
-            'admin') {
-      Get.offAllNamed(
-        '/login',
-      );
-      return;
-    }
+    setState(() {
+      gatewayController.text =
+          endpoint;
 
-    admin = current;
+      phoneController.text =
+          prefs.getString(
+                'admin_phone',
+              ) ??
+              '0771208144';
 
-    phone.text =
-        current['phone'] ?? '';
-
-    gatewayUrl.text =
-        await GatewayService
-            .getEndpoint();
-
-    if (mounted) {
-      setState(() {
-        loading = false;
-      });
-    }
+      passwordController.text =
+          prefs.getString(
+                'admin_password',
+              ) ??
+              'Admin@2024';
+    });
   }
 
-  Future<void>
-      saveSettings() async {
-    if (admin == null) return;
-
-    final newPhone =
-        normalizeUgandaPhone(
-      phone.text,
+  Future<void> save() async {
+    await GatewayService.setEndpoint(
+      gatewayController.text.trim(),
     );
 
-    if (!isValidUgandaPhone(
-      newPhone,
-    )) {
-      Get.snackbar(
-        'Invalid Phone',
-        'Enter a valid 10-digit Uganda phone number.',
-        snackPosition:
-            SnackPosition.BOTTOM,
-      );
-      return;
-    }
+    final prefs =
+        await SharedPreferences
+            .getInstance();
 
-    final changingPassword =
-        newPassword
-                .text
-                .isNotEmpty ||
-            confirmPassword
-                .text
-                .isNotEmpty;
-
-    if (changingPassword) {
-      if (currentPassword.text !=
-          admin!['password']) {
-        Get.snackbar(
-          'Wrong Password',
-          'Your current password is incorrect.',
-          snackPosition:
-              SnackPosition.BOTTOM,
-        );
-        return;
-      }
-
-      if (newPassword.text.length <
-          6) {
-        Get.snackbar(
-          'Weak Password',
-          'New password must have at least 6 characters.',
-          snackPosition:
-              SnackPosition.BOTTOM,
-        );
-        return;
-      }
-
-      if (newPassword.text !=
-          confirmPassword.text) {
-        Get.snackbar(
-          'Password Error',
-          'New passwords do not match.',
-          snackPosition:
-              SnackPosition.BOTTOM,
-        );
-        return;
-      }
-    }
-
-    final existing =
-        await db.getUserByPhone(
-      newPhone,
+    await prefs.setString(
+      'admin_phone',
+      phoneController.text.trim(),
     );
 
-    if (existing != null &&
-        existing['id'] !=
-            admin!['id']) {
-      Get.snackbar(
-        'Phone Already Used',
-        'Another account already uses this phone number.',
-        snackPosition:
-            SnackPosition.BOTTOM,
-      );
-      return;
-    }
-
-    setState(() {
-      saving = true;
-    });
-
-    final changes =
-        <String, dynamic>{
-      'phone':
-          newPhone,
-    };
-
-    if (changingPassword) {
-      changes['password'] =
-          newPassword.text;
-    }
-
-    await db.updateUser(
-      admin!['id'],
-      changes,
+    await prefs.setString(
+      'admin_password',
+      passwordController.text,
     );
-
-    await GatewayService
-        .setEndpoint(
-      gatewayUrl.text.trim(),
-    );
-
-    admin = {
-      ...admin!,
-      ...changes,
-    };
-
-    currentPassword.clear();
-    newPassword.clear();
-    confirmPassword.clear();
-
-    if (!mounted) return;
-
-    setState(() {
-      saving = false;
-    });
 
     Get.snackbar(
-      'Settings Saved',
-      'Your admin settings have been updated.',
-      snackPosition:
-          SnackPosition.BOTTOM,
+      'Settings',
+      'Settings saved.',
     );
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
-    if (loading) {
-      return const Scaffold(
-        body:
-            Center(
-          child:
-              CircularProgressIndicator(
-            color:
-                spenixCyan,
-          ),
-        ),
-      );
-    }
-
-    return Scaffold(
-      appBar:
-          spenixAppBar(
-        'Admin Account Settings',
-      ),
-      body:
-          ListView(
+  Widget build(BuildContext context) {
+    return SpenixScaffold(
+      title: 'Admin Settings',
+      body: ListView(
         padding:
-            const EdgeInsets.all(
-          20,
-        ),
+            const EdgeInsets.all(16),
         children: [
-          const Icon(
-            Icons
-                .admin_panel_settings,
-            color:
-                spenixCyan,
-            size:
-                80,
-          ),
-
-          const SizedBox(
-            height:
-                20,
-          ),
-
           const Text(
-            'Admin Login',
-            style:
-                TextStyle(
-              fontSize:
-                  22,
+            'GATEWAY API',
+            style: TextStyle(
+              color: Colors.cyan,
               fontWeight:
                   FontWeight.bold,
+              fontSize: 18,
             ),
           ),
 
-          const SizedBox(
-            height:
-                15,
-          ),
-
-          ugandaPhoneField(
-            phone,
-            label:
-                'Admin Phone / Login',
-          ),
-
-          const SizedBox(
-            height:
-                30,
-          ),
-
-          const Text(
-            'Windows Gateway',
-            style:
-                TextStyle(
-              fontSize:
-                  21,
-              fontWeight:
-                  FontWeight.bold,
-            ),
-          ),
-
-          const SizedBox(
-            height:
-                8,
-          ),
-
-          const Text(
-            'This is where the Spenix app will later connect to your Windows Gateway Control Server.',
-            style:
-                TextStyle(
-              color:
-                  Colors.white60,
-            ),
-          ),
-
-          const SizedBox(
-            height:
-                15,
-          ),
+          const SizedBox(height: 10),
 
           TextField(
             controller:
-                gatewayUrl,
-            keyboardType:
-                TextInputType.url,
+                gatewayController,
             decoration:
                 const InputDecoration(
               labelText:
-                  'Gateway API Address',
+                  'Gateway API endpoint',
               hintText:
-                  'http://192.168.1.100:8080',
-              prefixIcon:
-                  Icon(
-                Icons.router,
-                color:
-                    spenixCyan,
-              ),
+                  'http://10.8.0.1:8080',
+              border:
+                  OutlineInputBorder(),
             ),
           ),
 
-          const SizedBox(
-            height:
-                8,
-          ),
+          const SizedBox(height: 20),
 
           const Text(
-            'Leave this empty for now because the Windows gateway API has not been built yet.',
-            style:
-                TextStyle(
-              color:
-                  Colors.white38,
-              fontSize:
-                  12,
-            ),
-          ),
-
-          const SizedBox(
-            height:
-                30,
-          ),
-
-          const Text(
-            'Change Password',
-            style:
-                TextStyle(
-              fontSize:
-                  20,
+            'ADMIN ACCOUNT',
+            style: TextStyle(
+              color: Colors.cyan,
               fontWeight:
                   FontWeight.bold,
+              fontSize: 18,
             ),
           ),
 
-          const SizedBox(
-            height:
-                15,
-          ),
+          const SizedBox(height: 10),
 
           TextField(
             controller:
-                currentPassword,
-            obscureText:
-                true,
+                phoneController,
+            keyboardType:
+                TextInputType.phone,
             decoration:
                 const InputDecoration(
               labelText:
-                  'Current Password',
-              prefixIcon:
-                  Icon(
-                Icons.lock,
-                color:
-                    spenixCyan,
-              ),
+                  'Admin phone',
+              border:
+                  OutlineInputBorder(),
             ),
           ),
 
-          const SizedBox(
-            height:
-                12,
-          ),
+          const SizedBox(height: 15),
 
           TextField(
             controller:
-                newPassword,
-            obscureText:
-                true,
+                passwordController,
+            obscureText: true,
             decoration:
                 const InputDecoration(
               labelText:
-                  'New Password',
-              prefixIcon:
-                  Icon(
-                Icons.lock_outline,
-                color:
-                    spenixCyan,
-              ),
+                  'Admin password',
+              border:
+                  OutlineInputBorder(),
             ),
           ),
 
-          const SizedBox(
-            height:
-                12,
-          ),
+          const SizedBox(height: 25),
 
-          TextField(
-            controller:
-                confirmPassword,
-            obscureText:
-                true,
-            decoration:
-                const InputDecoration(
-              labelText:
-                  'Confirm New Password',
-              prefixIcon:
-                  Icon(
-                Icons.lock_outline,
-                color:
-                    spenixCyan,
+          SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: FilledButton(
+              onPressed: save,
+              child:
+                  const Text(
+                'SAVE SETTINGS',
               ),
-            ),
-          ),
-
-          const SizedBox(
-            height:
-                25,
-          ),
-
-          ElevatedButton(
-            onPressed:
-                saving
-                    ? null
-                    : saveSettings,
-            child:
-                saving
-                    ? const CircularProgressIndicator(
-                        color:
-                            Colors.black,
-                      )
-                    : const Text(
-                        'SAVE SETTINGS',
-                        style:
-                            TextStyle(
-                          fontWeight:
-                              FontWeight
-                                  .bold,
-                        ),
-                      ),
-          ),
-
-          const SizedBox(
-            height:
-                20,
-          ),
-
-          const Text(
-            'The gateway monitoring section will use real data from the Windows gateway. No fake speed, user count, or bandwidth figures are generated.',
-            style:
-                TextStyle(
-              color:
-                  Colors.white54,
-              fontSize:
-                  13,
             ),
           ),
         ],
