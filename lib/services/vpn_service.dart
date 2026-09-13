@@ -21,14 +21,15 @@ class VpnService {
   }) async {
     try {
       status.value = false;
-      message.value = 'Checking internet...';
+      message.value = 'Checking phone internet...';
 
       final dynamic result =
           await _channel.invokeMethod('connect');
 
       if (result != true) {
         status.value = false;
-        message.value = 'VPN connection failed.';
+        message.value =
+            'VPN connection failed.';
         return false;
       }
 
@@ -66,7 +67,8 @@ class VpnService {
       status.value = false;
 
       message.value =
-          e.message ?? 'VPN connection failed.';
+          e.message ??
+              'VPN connection failed.';
 
       return false;
     } catch (e) {
@@ -81,15 +83,18 @@ class VpnService {
 
   static Future<bool> disconnect() async {
     try {
-      await _channel.invokeMethod('disconnect');
+      await _channel.invokeMethod(
+        'disconnect',
+      );
 
       status.value = false;
       message.value = 'Disconnected';
 
       return true;
-    } catch (e) {
+    } catch (_) {
       status.value = false;
-      message.value = 'Disconnect failed.';
+      message.value =
+          'Disconnect failed.';
 
       return false;
     }
@@ -103,7 +108,7 @@ class VpnService {
       );
 
       return result == true;
-    } catch (e) {
+    } catch (_) {
       return false;
     }
   }
@@ -116,7 +121,7 @@ class VpnService {
       );
 
       return result == true;
-    } catch (e) {
+    } catch (_) {
       return false;
     }
   }
