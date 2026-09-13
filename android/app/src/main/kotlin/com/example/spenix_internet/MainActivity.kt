@@ -5,68 +5,109 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Bundle
+
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+
 import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
+
 import java.io.BufferedReader
 import java.io.StringReader
 
 class MainActivity : FlutterActivity() {
 
     private val CHANNEL = "spenix_vpn"
+
     private val VPN_REQUEST_CODE = 1001
 
     private lateinit var backend: GoBackend
 
     private var tunnel: Tunnel? = null
+
     private var pendingConnect = false
 
-    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
+    private var pendingConnectResult:
+        MethodChannel.Result? = null
+
+    override fun configureFlutterEngine(
+        flutterEngine: FlutterEngine
+    ) {
+        super.configureFlutterEngine(
+            flutterEngine
+        )
 
         backend = GoBackend(this)
 
         MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
+            flutterEngine
+                .dartExecutor
+                .binaryMessenger,
             CHANNEL
         ).setMethodCallHandler { call, result ->
 
             when (call.method) {
 
                 "connect" -> {
+
                     if (!hasWorkingInternet()) {
+
                         result.error(
                             "NO_INTERNET",
-                            "Mobile data/internet is not available.",
+                            "Phone internet/mobile data is not available.",
                             null
                         )
+
+                        return@setMethodCallHandler
+                    }
+
+                    if (pendingConnect) {
+
+                        result.error(
+                            "ALREADY_CONNECTING",
+                            "VPN connection is already being started.",
+                            null
+                        )
+
                         return@setMethodCallHandler
                     }
 
                     pendingConnect = true
 
-                    val intent = VpnService.prepare(this)
+                    pendingConnectResult =
+                        result
+
+                    val intent =
+                        VpnService.prepare(
+                            this
+                        )
 
                     if (intent != null) {
+
                         startActivityForResult(
                             intent,
                             VPN_REQUEST_CODE
                         )
-                    } else {
-                        startWireGuard(result)
-                    }
 
-                    result.success(true)
+                    } else {
+
+                        startWireGuard()
+                    }
                 }
 
                 "disconnect" -> {
+
                     pendingConnect = false
 
+                    pendingConnectResult =
+                        null
+
                     try {
+
                         tunnel?.let {
+
                             backend.setState(
                                 it,
                                 Tunnel.State.DOWN,
@@ -74,26 +115,35 @@ class MainActivity : FlutterActivity() {
                             )
                         }
 
+                        tunnel = null
+
                         result.success(true)
 
                     } catch (e: Exception) {
+
                         result.error(
                             "DISCONNECT_ERROR",
-                            e.message,
+                            e.message
+                                ?: "Could not disconnect VPN.",
                             null
                         )
                     }
                 }
 
                 "startGateway" -> {
+
                     result.success(false)
                 }
 
                 "stopGateway" -> {
+
                     result.success(false)
                 }
 
-                else -> result.notImplemented()
+                else -> {
+
+                    result.notImplemented()
+                }
             }
         }
     }
@@ -110,20 +160,23 @@ class MainActivity : FlutterActivity() {
                 ?: return false
 
         val capabilities =
-            connectivityManager.getNetworkCapabilities(network)
+            connectivityManager
+                .getNetworkCapabilities(
+                    network
+                )
                 ?: return false
 
         return capabilities.hasCapability(
-            NetworkCapabilities.NET_CAPABILITY_INTERNET
+            NetworkCapabilities
+                .NET_CAPABILITY_INTERNET
         ) &&
         capabilities.hasCapability(
-            NetworkCapabilities.NET_CAPABILITY_VALIDATED
+            NetworkCapabilities
+                .NET_CAPABILITY_VALIDATED
         )
     }
 
-    private fun startWireGuard(
-        result: MethodChannel.Result? = null
-    ) {
+    private fun startWireGuard() {
 
         try {
 
@@ -144,7 +197,9 @@ class MainActivity : FlutterActivity() {
             val config =
                 Config.parse(
                     BufferedReader(
-                        StringReader(configText)
+                        StringReader(
+                            configText
+                        )
                     )
                 )
 
@@ -152,7 +207,8 @@ class MainActivity : FlutterActivity() {
 
                 tunnel = object : Tunnel {
 
-                    override fun getName(): String {
+                    override fun getName():
+                        String {
                         return "Spenix"
                     }
 
@@ -171,17 +227,24 @@ class MainActivity : FlutterActivity() {
 
             pendingConnect = false
 
-            result?.success(true)
+            pendingConnectResult?.success(
+                true
+            )
+
+            pendingConnectResult = null
 
         } catch (e: Exception) {
 
             pendingConnect = false
 
-            result?.error(
+            pendingConnectResult?.error(
                 "VPN_ERROR",
-                e.message,
+                e.message
+                    ?: "Could not start WireGuard.",
                 null
             )
+
+            pendingConnectResult = null
         }
     }
 
@@ -190,22 +253,37 @@ class MainActivity : FlutterActivity() {
         resultCode: Int,
         data: Intent?
     ) {
-
         super.onActivityResult(
             requestCode,
             resultCode,
             data
         )
 
-        if (requestCode == VPN_REQUEST_CODE) {
+        if (
+            requestCode !=
+                VPN_REQUEST_CODE
+        ) {
+            return
+        }
 
-            if (resultCode == RESULT_OK &&
-                pendingConnect
-            ) {
-                startWireGuard()
-            } else {
-                pendingConnect = false
-            }
+        if (
+            resultCode == RESULT_OK &&
+            pendingConnect
+        ) {
+
+            startWireGuard()
+
+        } else {
+
+            pendingConnect = false
+
+            pendingConnectResult?.error(
+                "VPN_PERMISSION_DENIED",
+                "VPN permission was not granted.",
+                null
+            )
+
+            pendingConnectResult = null
         }
     }
 
@@ -214,6 +292,7 @@ class MainActivity : FlutterActivity() {
         try {
 
             tunnel?.let {
+
                 backend.setState(
                     it,
                     Tunnel.State.DOWN,
@@ -223,6 +302,10 @@ class MainActivity : FlutterActivity() {
 
         } catch (_: Exception) {
         }
+
+        pendingConnect = false
+
+        pendingConnectResult = null
 
         super.onDestroy()
     }
