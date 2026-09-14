@@ -14,6 +14,8 @@ class VpnService {
   static final RxString message =
       'Disconnected'.obs;
 
+  static GatewayStatus? lastGatewayStatus;
+
   static bool get isConnected =>
       status.value;
 
@@ -23,10 +25,6 @@ class VpnService {
   }) async {
     try {
       status.value = false;
-
-      // ----------------------------------------------------------
-      // STEP 1: CHECK PHONE INTERNET
-      // ----------------------------------------------------------
 
       message.value =
           'Checking phone internet...';
@@ -43,78 +41,36 @@ class VpnService {
         return false;
       }
 
-      // ----------------------------------------------------------
-      // STEP 2: GIVE WIREGUARD TIME TO CONNECT
-      // ----------------------------------------------------------
+      status.value = true;
 
       message.value =
-          'Connecting to Spenix gateway...';
+          'Spenix VPN connected';
+
+      /*
+       * IMPORTANT:
+       * Do NOT disconnect the VPN just because
+       * the gateway API takes time to respond.
+       *
+       * The VPN tunnel is now running.
+       * The dashboard will continue checking
+       * the gateway separately.
+       */
 
       await Future.delayed(
         const Duration(seconds: 2),
       );
 
-      // ----------------------------------------------------------
-      // STEP 3: CHECK GATEWAY
-      // ----------------------------------------------------------
+      lastGatewayStatus =
+          await GatewayService.check();
 
-      GatewayStatus? gateway;
-
-      for (int attempt = 1; attempt <= 5; attempt++) {
+      if (lastGatewayStatus != null &&
+          lastGatewayStatus!.online) {
         message.value =
-            'Checking Spenix gateway... '
-            '($attempt/5)';
-
-        gateway =
-            await GatewayService.check();
-
-        if (gateway.online &&
-            gateway.internetWorking) {
-          break;
-        }
-
-        if (attempt < 5) {
-          await Future.delayed(
-            const Duration(seconds: 1),
-          );
-        }
-      }
-
-      // ----------------------------------------------------------
-      // STEP 4: GATEWAY MUST BE ONLINE
-      // ----------------------------------------------------------
-
-      if (gateway == null ||
-          !gateway.online) {
-        await disconnect();
-
+            'Connected to Spenix gateway';
+      } else {
         message.value =
-            'Spenix gateway is offline.';
-
-        return false;
+            'VPN connected. Checking gateway...';
       }
-
-      // ----------------------------------------------------------
-      // STEP 5: GATEWAY MUST HAVE INTERNET
-      // ----------------------------------------------------------
-
-      if (!gateway.internetWorking) {
-        await disconnect();
-
-        message.value =
-            'Spenix gateway has no internet.';
-
-        return false;
-      }
-
-      // ----------------------------------------------------------
-      // STEP 6: SUCCESS
-      // ----------------------------------------------------------
-
-      status.value = true;
-
-      message.value =
-          'Spenix VPN connected to gateway';
 
       return true;
     } on PlatformException catch (e) {
@@ -135,6 +91,15 @@ class VpnService {
     }
   }
 
+  static Future<GatewayStatus> refreshGateway() async {
+    final GatewayStatus gateway =
+        await GatewayService.check();
+
+    lastGatewayStatus = gateway;
+
+    return gateway;
+  }
+
   static Future<bool> disconnect() async {
     try {
       await _channel.invokeMethod(
@@ -145,6 +110,8 @@ class VpnService {
 
       message.value =
           'Disconnected';
+
+      lastGatewayStatus = null;
 
       return true;
     } catch (e) {
