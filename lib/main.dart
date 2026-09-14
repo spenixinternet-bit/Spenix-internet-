@@ -7,7 +7,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -224,13 +223,11 @@ class DB {
         continue;
       }
 
-      final expiry =
-          DateTime.tryParse(
+      final expiry = DateTime.tryParse(
         subscription['expiresAt']?.toString() ?? '',
       );
 
-      if (expiry != null &&
-          expiry.isAfter(now)) {
+      if (expiry != null && expiry.isAfter(now)) {
         return subscription;
       }
     }
@@ -268,9 +265,7 @@ class DB {
     final vouchers = getVouchers();
 
     for (final voucher in vouchers) {
-      if (voucher['code']
-              ?.toString()
-              .toUpperCase() ==
+      if (voucher['code']?.toString().toUpperCase() ==
           code.toUpperCase()) {
         return voucher;
       }
@@ -286,9 +281,7 @@ class DB {
     final vouchers = getVouchers();
 
     for (final voucher in vouchers) {
-      if (voucher['code']
-              ?.toString()
-              .toUpperCase() ==
+      if (voucher['code']?.toString().toUpperCase() ==
           code.toUpperCase()) {
         if (voucher['used'] == true) {
           return false;
@@ -386,7 +379,6 @@ class SpenixApp extends StatelessWidget {
     return GetMaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Spenix Internet',
-
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor:
@@ -397,9 +389,7 @@ class SpenixApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-
       initialRoute: '/splash',
-
       getPages: [
         GetPage(
           name: '/splash',
@@ -739,7 +729,6 @@ class _LoginScreenState
                   'Login to your account',
                 ),
                 const SizedBox(height: 35),
-
                 TextField(
                   controller: phoneController,
                   keyboardType:
@@ -753,9 +742,7 @@ class _LoginScreenState
                         OutlineInputBorder(),
                   ),
                 ),
-
                 const SizedBox(height: 15),
-
                 TextField(
                   controller:
                       passwordController,
@@ -775,17 +762,14 @@ class _LoginScreenState
                       icon: Icon(
                         hidePassword
                             ? Icons.visibility
-                            : Icons
-                                .visibility_off,
+                            : Icons.visibility_off,
                       ),
                     ),
                     border:
                         const OutlineInputBorder(),
                   ),
                 ),
-
                 const SizedBox(height: 20),
-
                 SizedBox(
                   width: double.infinity,
                   height: 52,
@@ -803,9 +787,7 @@ class _LoginScreenState
                           ),
                   ),
                 ),
-
                 const SizedBox(height: 15),
-
                 TextButton(
                   onPressed: () {
                     Get.toNamed('/register');
@@ -979,7 +961,13 @@ class _HomeScreenState
       GatewayStatus.waiting();
 
   Timer? timer;
+
   bool connecting = false;
+
+  // IMPORTANT:
+  // Prevents another gateway check from starting
+  // while the previous check is still running.
+  bool checkingGateway = false;
 
   @override
   void initState() {
@@ -989,7 +977,9 @@ class _HomeScreenState
 
     timer = Timer.periodic(
       const Duration(seconds: 10),
-      (_) => refreshGateway(),
+      (_) {
+        refreshGateway();
+      },
     );
   }
 
@@ -1000,14 +990,25 @@ class _HomeScreenState
   }
 
   Future<void> refreshGateway() async {
-    final result =
-        await GatewayService.check();
+    // Prevent overlapping checks.
+    if (checkingGateway) {
+      return;
+    }
 
-    if (!mounted) return;
+    checkingGateway = true;
 
-    setState(() {
-      gateway = result;
-    });
+    try {
+      final result =
+          await GatewayService.check();
+
+      if (!mounted) return;
+
+      setState(() {
+        gateway = result;
+      });
+    } finally {
+      checkingGateway = false;
+    }
   }
 
   Future<void> connect() async {
@@ -1033,6 +1034,8 @@ class _HomeScreenState
       );
       return;
     }
+
+    await refreshGateway();
 
     Get.snackbar(
       'Connected',
@@ -1098,13 +1101,18 @@ class _HomeScreenState
                       color: Colors.cyan,
                     ),
                     const SizedBox(height: 12),
-                    Text(
-                      VpnService
-                          .message
-                          .value,
-                      textAlign:
-                          TextAlign.center,
+
+                    // IMPORTANT:
+                    // Obx makes the VPN message update
+                    // immediately when its value changes.
+                    Obx(
+                      () => Text(
+                        VpnService.message.value,
+                        textAlign:
+                            TextAlign.center,
+                      ),
                     ),
+
                     const SizedBox(height: 20),
 
                     Obx(
@@ -1130,8 +1138,7 @@ class _HomeScreenState
                                   style:
                                       const TextStyle(
                                     fontWeight:
-                                        FontWeight
-                                            .bold,
+                                        FontWeight.bold,
                                   ),
                                 ),
                         ),
@@ -1330,8 +1337,7 @@ class _PackagesScreenState
                       const Color(0xFF0B2025),
                   child: Padding(
                     padding:
-                        const EdgeInsets.all(
-                            18),
+                        const EdgeInsets.all(18),
                     child: Column(
                       crossAxisAlignment:
                           CrossAxisAlignment
@@ -1597,6 +1603,8 @@ class _AccountScreenState
   GatewayStatus gateway =
       GatewayStatus.waiting();
 
+  bool checkingGateway = false;
+
   @override
   void initState() {
     super.initState();
@@ -1605,14 +1613,24 @@ class _AccountScreenState
   }
 
   Future<void> load() async {
-    final result =
-        await GatewayService.check();
+    if (checkingGateway) {
+      return;
+    }
 
-    if (!mounted) return;
+    checkingGateway = true;
 
-    setState(() {
-      gateway = result;
-    });
+    try {
+      final result =
+          await GatewayService.check();
+
+      if (!mounted) return;
+
+      setState(() {
+        gateway = result;
+      });
+    } finally {
+      checkingGateway = false;
+    }
   }
 
   @override
@@ -1736,6 +1754,8 @@ class _AdminDashboardState
 
   Timer? timer;
 
+  bool checkingGateway = false;
+
   @override
   void initState() {
     super.initState();
@@ -1744,7 +1764,9 @@ class _AdminDashboardState
 
     timer = Timer.periodic(
       const Duration(seconds: 10),
-      (_) => refresh(),
+      (_) {
+        refresh();
+      },
     );
   }
 
@@ -1755,14 +1777,25 @@ class _AdminDashboardState
   }
 
   Future<void> refresh() async {
-    final result =
-        await GatewayService.check();
+    // Prevent overlapping requests.
+    if (checkingGateway) {
+      return;
+    }
 
-    if (!mounted) return;
+    checkingGateway = true;
 
-    setState(() {
-      gateway = result;
-    });
+    try {
+      final result =
+          await GatewayService.check();
+
+      if (!mounted) return;
+
+      setState(() {
+        gateway = result;
+      });
+    } finally {
+      checkingGateway = false;
+    }
   }
 
   @override
@@ -2623,6 +2656,8 @@ class _AdminSettingsScreenState
     final prefs =
         await SharedPreferences
             .getInstance();
+
+    if (!mounted) return;
 
     setState(() {
       gatewayController.text =
