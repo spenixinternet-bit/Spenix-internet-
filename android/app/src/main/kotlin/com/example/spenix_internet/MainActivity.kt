@@ -5,6 +5,8 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.VpnService
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -16,6 +18,8 @@ import com.wireguard.config.Config
 
 import java.io.BufferedReader
 import java.io.StringReader
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
 
@@ -31,6 +35,13 @@ class MainActivity : FlutterActivity() {
 
     private var pendingConnectResult:
         MethodChannel.Result? = null
+
+    private val wireGuardExecutor:
+        ExecutorService =
+        Executors.newSingleThreadExecutor()
+
+    private val mainHandler =
+        Handler(Looper.getMainLooper())
 
     override fun configureFlutterEngine(
         flutterEngine: FlutterEngine
@@ -104,29 +115,42 @@ class MainActivity : FlutterActivity() {
                     pendingConnectResult =
                         null
 
-                    try {
+                    wireGuardExecutor.execute {
 
-                        tunnel?.let {
+                        try {
 
-                            backend.setState(
-                                it,
-                                Tunnel.State.DOWN,
-                                null
-                            )
+                            tunnel?.let {
+
+                                backend.setState(
+                                    it,
+                                    Tunnel.State.DOWN,
+                                    null
+                                )
+                            }
+
+                            tunnel = null
+
+                            mainHandler.post {
+
+                                result.success(true)
+                            }
+
+                        } catch (e: Exception) {
+
+                            mainHandler.post {
+
+                                result.error(
+                                    "DISCONNECT_ERROR",
+                                    e.javaClass.simpleName +
+                                        ": " +
+                                        (
+                                            e.message
+                                                ?: "Could not disconnect VPN."
+                                        ),
+                                    null
+                                )
+                            }
                         }
-
-                        tunnel = null
-
-                        result.success(true)
-
-                    } catch (e: Exception) {
-
-                        result.error(
-                            "DISCONNECT_ERROR",
-                            e.message
-                                ?: "Could not disconnect VPN.",
-                            null
-                        )
                     }
                 }
 
@@ -178,78 +202,93 @@ class MainActivity : FlutterActivity() {
 
     private fun startWireGuard() {
 
-        try {
+        wireGuardExecutor.execute {
 
-            val configText = """
-                [Interface]
-                PrivateKey = 6M4lNVQajP6/Hjc8Js+Zz71RfON7n/EzRAN2cfEhoHk=
-                Address = 10.8.0.2/32
-                DNS = 1.1.1.1
-                MTU = 1380
+            try {
 
-                [Peer]
-                PublicKey = 3YnmBNDVFlbWDcBDLuLoU7I2FN+zK0FN4pkfOLZ97X0=
-                AllowedIPs = 0.0.0.0/0
-                Endpoint = spenixvpn.duckdns.org:51820
-                PersistentKeepalive = 25
-            """.trimIndent()
+                val configText = """
+                    [Interface]
+                    PrivateKey = 6M4lNVQajP6/Hjc8Js+Zz71RfON7n/EzRAN2cfEhoHk=
+                    Address = 10.8.0.2/32
+                    DNS = 1.1.1.1
+                    MTU = 1380
 
-            val config =
-                Config.parse(
-                    BufferedReader(
-                        StringReader(
-                            configText
+                    [Peer]
+                    PublicKey = 3YnmBNDVFlbWDcBDLuLoU7I2FN+zK0FN4pkfOLZ97X0=
+                    AllowedIPs = 0.0.0.0/0
+                    Endpoint = spenixvpn.duckdns.org:51820
+                    PersistentKeepalive = 25
+                """.trimIndent()
+
+                val config =
+                    Config.parse(
+                        BufferedReader(
+                            StringReader(
+                                configText
+                            )
                         )
                     )
+
+                if (tunnel == null) {
+
+                    tunnel =
+                        object : Tunnel {
+
+                            override fun getName():
+                                String {
+                                return "Spenix"
+                            }
+
+                            override fun onStateChange(
+                                newState:
+                                    Tunnel.State
+                            ) {
+                            }
+                        }
+                }
+
+                backend.setState(
+                    tunnel!!,
+                    Tunnel.State.UP,
+                    config
                 )
 
-            if (tunnel == null) {
+                pendingConnect = false
 
-                tunnel = object : Tunnel {
+                mainHandler.post {
 
-                    override fun getName():
-                        String {
-                        return "Spenix"
-                    }
+                    pendingConnectResult?.success(
+                        true
+                    )
 
-                    override fun onStateChange(
-                        newState: Tunnel.State
-                    ) {
-                    }
+                    pendingConnectResult =
+                        null
+                }
+
+            } catch (e: Exception) {
+
+                pendingConnect = false
+
+                val errorMessage =
+                    e.javaClass.simpleName +
+                        ": " +
+                        (
+                            e.message
+                                ?: "Unknown WireGuard error"
+                        )
+
+                mainHandler.post {
+
+                    pendingConnectResult?.error(
+                        "VPN_ERROR",
+                        errorMessage,
+                        null
+                    )
+
+                    pendingConnectResult =
+                        null
                 }
             }
-
-            backend.setState(
-                tunnel!!,
-                Tunnel.State.UP,
-                config
-            )
-
-            pendingConnect = false
-
-            pendingConnectResult?.success(
-                true
-            )
-
-            pendingConnectResult = null
-
-        } catch (e: Exception) {
-
-            pendingConnect = false
-
-            val errorMessage =
-                e.javaClass.simpleName +
-                ": " +
-                (e.message
-                    ?: "Unknown WireGuard error")
-
-            pendingConnectResult?.error(
-                "VPN_ERROR",
-                errorMessage,
-                null
-            )
-
-            pendingConnectResult = null
         }
     }
 
@@ -296,13 +335,21 @@ class MainActivity : FlutterActivity() {
 
         try {
 
-            tunnel?.let {
+            wireGuardExecutor.execute {
 
-                backend.setState(
-                    it,
-                    Tunnel.State.DOWN,
-                    null
-                )
+                try {
+
+                    tunnel?.let {
+
+                        backend.setState(
+                            it,
+                            Tunnel.State.DOWN,
+                            null
+                        )
+                    }
+
+                } catch (_: Exception) {
+                }
             }
 
         } catch (_: Exception) {
@@ -311,6 +358,8 @@ class MainActivity : FlutterActivity() {
         pendingConnect = false
 
         pendingConnectResult = null
+
+        wireGuardExecutor.shutdownNow()
 
         super.onDestroy()
     }
