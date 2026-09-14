@@ -39,7 +39,7 @@ class GatewayStatus {
       onlineUsers: 0,
       recommendation: 'WAIT',
       userSpeeds: <String, double>{},
-      message: 'Waiting for gateway...',
+      message: 'Waiting for Spenix gateway...',
       gatewayIp: '10.8.0.1',
       wireguardPort: 51820,
       apiPort: 8080,
@@ -52,18 +52,12 @@ class GatewayStatus {
     final Map<String, double> speeds =
         <String, double>{};
 
-    final dynamic rawSpeeds =
-        json['userSpeeds'];
+    final dynamic rawSpeeds = json['userSpeeds'];
 
     if (rawSpeeds is Map) {
       rawSpeeds.forEach((key, value) {
-        final double speed =
-            double.tryParse(
-                  value.toString(),
-                ) ??
-                0.0;
-
-        speeds[key.toString()] = speed;
+        speeds[key.toString()] =
+            double.tryParse(value.toString()) ?? 0.0;
       });
     }
 
@@ -73,50 +67,35 @@ class GatewayStatus {
           json['internetWorking'] == true,
       incomingMbps:
           double.tryParse(
-                json['incomingMbps']
-                        ?.toString() ??
-                    '0',
+                json['incomingMbps']?.toString() ?? '0',
               ) ??
               0.0,
       usedMbps:
           double.tryParse(
-                json['usedMbps']
-                        ?.toString() ??
-                    '0',
+                json['usedMbps']?.toString() ?? '0',
               ) ??
               0.0,
       onlineUsers:
           int.tryParse(
-                json['onlineUsers']
-                        ?.toString() ??
-                    '0',
+                json['onlineUsers']?.toString() ?? '0',
               ) ??
               0,
       recommendation:
-          json['recommendation']
-                  ?.toString() ??
-              'WAIT',
+          json['recommendation']?.toString() ?? 'WAIT',
       userSpeeds: speeds,
       message:
-          json['message']
-                  ?.toString() ??
+          json['message']?.toString() ??
               'No gateway message.',
       gatewayIp:
-          json['gatewayIp']
-                  ?.toString() ??
-              '10.8.0.1',
+          json['gatewayIp']?.toString() ?? '10.8.0.1',
       wireguardPort:
           int.tryParse(
-                json['wireguardPort']
-                        ?.toString() ??
-                    '51820',
+                json['wireguardPort']?.toString() ?? '51820',
               ) ??
               51820,
       apiPort:
           int.tryParse(
-                json['apiPort']
-                        ?.toString() ??
-                    '8080',
+                json['apiPort']?.toString() ?? '8080',
               ) ??
               8080,
     );
@@ -124,8 +103,7 @@ class GatewayStatus {
 }
 
 class GatewayService {
-  static const String _endpointKey =
-      'gateway_api_url';
+  static const String _endpointKey = 'gateway_api_url';
 
   static const String defaultEndpoint =
       'http://10.8.0.1:8080';
@@ -137,8 +115,7 @@ class GatewayService {
     final String? saved =
         prefs.getString(_endpointKey);
 
-    if (saved == null ||
-        saved.trim().isEmpty) {
+    if (saved == null || saved.trim().isEmpty) {
       return defaultEndpoint;
     }
 
@@ -151,8 +128,7 @@ class GatewayService {
     final SharedPreferences prefs =
         await SharedPreferences.getInstance();
 
-    final String value =
-        endpoint.trim();
+    final String value = endpoint.trim();
 
     if (value.isEmpty) {
       await prefs.remove(_endpointKey);
@@ -166,23 +142,25 @@ class GatewayService {
 
   static Future<GatewayStatus> check() async {
     try {
-      String endpoint =
-          await getEndpoint();
+      String endpoint = await getEndpoint();
 
-      endpoint =
-          endpoint.replaceFirst(
+      endpoint = endpoint.replaceFirst(
         RegExp(r'/$'),
         '',
       );
 
-      final Uri url =
-          Uri.parse(
+      final Uri url = Uri.parse(
         '$endpoint/status',
       );
 
       final http.Response response =
-          await http.get(url).timeout(
-        const Duration(seconds: 5),
+          await http.get(
+        url,
+        headers: <String, String>{
+          'Accept': 'application/json',
+        },
+      ).timeout(
+        const Duration(seconds: 8),
       );
 
       if (response.statusCode != 200) {
@@ -193,10 +171,9 @@ class GatewayService {
           usedMbps: 0.0,
           onlineUsers: 0,
           recommendation: 'WAIT',
-          userSpeeds:
-              <String, double>{},
+          userSpeeds: <String, double>{},
           message:
-              'Gateway returned HTTP ${response.statusCode}.',
+              'Gateway API error: HTTP ${response.statusCode}',
           gatewayIp: '10.8.0.1',
           wireguardPort: 51820,
           apiPort: 8080,
@@ -214,10 +191,9 @@ class GatewayService {
           usedMbps: 0.0,
           onlineUsers: 0,
           recommendation: 'WAIT',
-          userSpeeds:
-              <String, double>{},
+          userSpeeds: <String, double>{},
           message:
-              'Gateway returned invalid data.',
+              'Gateway returned invalid status data.',
           gatewayIp: '10.8.0.1',
           wireguardPort: 51820,
           apiPort: 8080,
@@ -225,11 +201,9 @@ class GatewayService {
       }
 
       return GatewayStatus.fromJson(
-        Map<String, dynamic>.from(
-          decoded,
-        ),
+        Map<String, dynamic>.from(decoded),
       );
-    } catch (_) {
+    } catch (e) {
       return GatewayStatus(
         online: false,
         internetWorking: false,
@@ -237,10 +211,9 @@ class GatewayService {
         usedMbps: 0.0,
         onlineUsers: 0,
         recommendation: 'WAIT',
-        userSpeeds:
-            <String, double>{},
+        userSpeeds: <String, double>{},
         message:
-            'Cannot reach Spenix gateway.',
+            'Gateway cannot be reached through the VPN.',
         gatewayIp: '10.8.0.1',
         wireguardPort: 51820,
         apiPort: 8080,
