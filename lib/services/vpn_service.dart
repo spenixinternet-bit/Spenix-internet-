@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
@@ -21,25 +23,69 @@ class VpnService {
   }) async {
     try {
       status.value = false;
-      message.value = 'Checking phone internet...';
 
-      final dynamic result =
+      // ----------------------------------------------------------
+      // STEP 1: CHECK PHONE INTERNET
+      // ----------------------------------------------------------
+
+      message.value =
+          'Checking phone internet...';
+
+      final dynamic vpnResult =
           await _channel.invokeMethod('connect');
 
-      if (result != true) {
+      if (vpnResult != true) {
         status.value = false;
+
         message.value =
-            'VPN connection failed.';
+            'WireGuard could not start.';
+
         return false;
       }
 
+      // ----------------------------------------------------------
+      // STEP 2: GIVE WIREGUARD TIME TO CONNECT
+      // ----------------------------------------------------------
+
       message.value =
-          'Checking Spenix gateway...';
+          'Connecting to Spenix gateway...';
 
-      final GatewayStatus gateway =
-          await GatewayService.check();
+      await Future.delayed(
+        const Duration(seconds: 2),
+      );
 
-      if (!gateway.online) {
+      // ----------------------------------------------------------
+      // STEP 3: CHECK GATEWAY
+      // ----------------------------------------------------------
+
+      GatewayStatus? gateway;
+
+      for (int attempt = 1; attempt <= 5; attempt++) {
+        message.value =
+            'Checking Spenix gateway... '
+            '($attempt/5)';
+
+        gateway =
+            await GatewayService.check();
+
+        if (gateway.online &&
+            gateway.internetWorking) {
+          break;
+        }
+
+        if (attempt < 5) {
+          await Future.delayed(
+            const Duration(seconds: 1),
+          );
+        }
+      }
+
+      // ----------------------------------------------------------
+      // STEP 4: GATEWAY MUST BE ONLINE
+      // ----------------------------------------------------------
+
+      if (gateway == null ||
+          !gateway.online) {
         await disconnect();
 
         message.value =
@@ -47,6 +93,10 @@ class VpnService {
 
         return false;
       }
+
+      // ----------------------------------------------------------
+      // STEP 5: GATEWAY MUST HAVE INTERNET
+      // ----------------------------------------------------------
 
       if (!gateway.internetWorking) {
         await disconnect();
@@ -57,10 +107,14 @@ class VpnService {
         return false;
       }
 
+      // ----------------------------------------------------------
+      // STEP 6: SUCCESS
+      // ----------------------------------------------------------
+
       status.value = true;
 
       message.value =
-          'Spenix VPN connected';
+          'Spenix VPN connected to gateway';
 
       return true;
     } on PlatformException catch (e) {
@@ -68,14 +122,14 @@ class VpnService {
 
       message.value =
           e.message ??
-              'VPN connection failed.';
+              'WireGuard could not start.';
 
       return false;
     } catch (e) {
       status.value = false;
 
       message.value =
-          'VPN error: $e';
+          'VPN connection error: $e';
 
       return false;
     }
@@ -88,13 +142,16 @@ class VpnService {
       );
 
       status.value = false;
-      message.value = 'Disconnected';
+
+      message.value =
+          'Disconnected';
 
       return true;
-    } catch (_) {
+    } catch (e) {
       status.value = false;
+
       message.value =
-          'Disconnect failed.';
+          'Disconnect failed: $e';
 
       return false;
     }
